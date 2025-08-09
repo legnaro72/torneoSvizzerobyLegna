@@ -45,18 +45,16 @@ def delete_player(index):
     df = st.session_state.df_giocatori.copy()
     df = df.drop(index).reset_index(drop=True)
     st.session_state.df_giocatori = df
-    # Se si stava modificando quel giocatore, resetta il form
     if st.session_state.edit_index == index:
         stop_edit()
 
 st.button("➕ Aggiungi nuovo giocatore", on_click=toggle_new_player_form)
 
-# Form Aggiungi Nuovo Giocatore
 if st.session_state.show_new_player_form:
     with st.form("form_nuovo_giocatore", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
-        nuovo_giocatore = col1.text_input("Nome Giocatore", placeholder="Nome nuovo giocatore")
-        nuova_squadra = col2.text_input("Squadra", placeholder="Squadra")
+        nuovo_giocatore = col1.text_input("Nick Name Giocatore", placeholder="Nome nuovo giocatore")
+        nuova_squadra = col2.text_input("Squadra preferita", placeholder="Squadra")
         nuovo_potenziale = col3.slider("Potenziale", 1, 10, 4)
         submitted = st.form_submit_button("✅ Aggiungi")
         if submitted:
@@ -77,9 +75,16 @@ if st.session_state.show_new_player_form:
 
 st.markdown("### Lista giocatori attuali")
 
+# Intestazione tabella personalizzata
+col_nick, col_squad, col_pot, col_edit, col_del = st.columns([3,3,2,1,1])
+col_nick.markdown("**Nick Name Giocatore**")
+col_squad.markdown("**Squadra preferita**")
+col_pot.markdown("**Potenziale**")
+col_edit.markdown("**✏️ Modifica**")
+col_del.markdown("**🗑️ Elimina**")
+
 df = st.session_state.df_giocatori.copy()
 
-# Mostra tabella con pulsante modifica e cancellazione
 for i, row in df.iterrows():
     col_gioc, col_squad, col_pot, col_edit, col_del = st.columns([3,3,2,1,1])
     col_gioc.write(row["Giocatore"])
@@ -89,9 +94,8 @@ for i, row in df.iterrows():
         start_edit(i)
     if col_del.button("🗑️", key=f"del_{i}"):
         delete_player(i)
-        st.experimental_rerun()  # Per aggiornare subito la lista dopo la cancellazione
+        st.experimental_rerun()
 
-# Form modifica giocatore
 if st.session_state.edit_index is not None:
     idx = st.session_state.edit_index
     gioc = st.session_state.df_giocatori.at[idx, "Giocatore"]
@@ -103,8 +107,8 @@ if st.session_state.edit_index is not None:
 
     with st.form("form_modifica_giocatore"):
         col1, col2, col3 = st.columns(3)
-        giocatore_mod = col1.text_input("Nome Giocatore", value=gioc)
-        squadra_mod = col2.text_input("Squadra", value=squadra)
+        giocatore_mod = col1.text_input("Nick Name Giocatore", value=gioc)
+        squadra_mod = col2.text_input("Squadra preferita", value=squadra)
         potenziale_mod = col3.slider("Potenziale", 1, 10, pot)
         submitted = st.form_submit_button("✅ Salva modifiche")
         if submitted:
