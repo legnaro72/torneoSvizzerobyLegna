@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import requests
+import io
 
 st.set_page_config(page_title="Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
@@ -51,6 +53,27 @@ def genera_accoppiamenti(classifica, precedenti):
     df = pd.DataFrame([{"Casa": c, "Ospite": o, "GolCasa": 0, "GolOspite": 0, "Validata": False} for c, o in accoppiamenti])
     return df
 
+def carica_csv_robusto_da_url(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        text = response.content.decode('latin1')  # decodifica robusta per evitare errori utf-8
+        df = pd.read_csv(io.StringIO(text))
+        return df
+    except Exception as e:
+        st.warning(f"Errore caricamento CSV da URL: {e}")
+        return pd.DataFrame()
+
+def carica_csv_robusto_da_file(file_buffer):
+    try:
+        content = file_buffer.read()
+        text = content.decode('latin1')  # decodifica robusta per evitare errori utf-8
+        df = pd.read_csv(io.StringIO(text))
+        return df
+    except Exception as e:
+        st.warning(f"Errore caricamento CSV da file: {e}")
+        return pd.DataFrame()
+
 # --- Stato sessione ---
 if "df_torneo" not in st.session_state:
     st.session_state.df_torneo = pd.DataFrame()
@@ -70,61 +93,70 @@ if "squadre_data" not in st.session_state:
     st.session_state.squadre_data = []
 
 # --- Interfaccia ---
-st.title("🏆 Torneo Subbuteo - Sistema Svizzero")
+st.title("? Torneo Subbuteo - Sistema Svizzero")
 
-scelta = st.radio("Scegli:", ["📂 Carica torneo esistente", "🆕 Crea nuovo torneo"])
+scelta = st.radio("Scegli:", ["?? Carica torneo esistente", "?? Crea nuovo torneo"])
 
 url_club = {
     "Superba": "https://raw.githubusercontent.com/legnaro72/torneoSvizzerobyLegna/refs/heads/main/giocatoriSuperba.csv",
     "PierCrew": "https://raw.githubusercontent.com/legnaro72/torneoSvizzerobyLegna/refs/heads/main/giocatoriPierCrew.csv",
 }
 
-if scelta == "📂 Carica torneo esistente":
+if scelta == "?? Carica torneo esistente":
     file = st.file_uploader("Carica file CSV del torneo", type="csv")
     if file:
-        st.session_state.df_torneo = pd.read_csv(file)
-        st.success("✅ Torneo caricato!")
+        st.session_state.df_torneo = carica_csv_robusto_da_file(file)
+        st.success("? Torneo caricato!")
 
-elif scelta == "🆕 Crea nuovo torneo":
+elif scelta == "?? Crea nuovo torneo":
     if st.session_state.nuovo_torneo_step == 1:
         club = st.selectbox("Scegli il Club", ["Superba", "PierCrew"], index=0)
         st.session_state.club_scelto = club
 
-        try:
-            df_giocatori_csv = pd.read_csv(url_club[club])
-        except Exception as e:
-            st.warning(f"Impossibile caricare lista giocatori: {e}")
-            df_giocatori_csv = pd.DataFrame(columns=["Giocatore", "Squadra", "Potenziale"])
+        df_giocatori_csv = carica_csv_robusto_da_url(url_club[club])
 
-        num_squadre = st.number_input("Numero squadre", min_value=2, max_value=100, step=1)
+        num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, step=1)
 
-        with st.form("form_step1"):
-            giocatori_options = df_giocatori_csv["Giocatore"].dropna().unique().tolist()
-            giocatori_options = ["(Nuovo giocatore)"] + giocatori_options
+        st.markdown("### ? Gli amici del Club")
+        giocatori_club = df_giocatori_csv["Giocatore"].dropna().unique().tolist()
 
-            giocatori_scelti_temp = []
-            for i in range(num_squadre):
-                gioc = st.selectbox(f"Giocatore {i+1}", giocatori_options, key=f"giocatore_{i}")
-                giocatori_scelti_temp.append(gioc)
+        seleziona_tutti = st.checkbox("Seleziona tutti i giocatori del club")
+        giocatori_selezionati_temp = []
 
-            submitted = st.form_submit_button("✅ Conferma giocatori")
+        if seleziona_tutti:
+            giocatori_selezionati_temp = giocatori_club.copy()
+            for g in giocatori_club:
+                st.checkbox(g, value=True, disabled=True)
+        else:
+            for g in giocatori_club:
+                if st.checkbox(g):
+                    giocatori_selezionati_temp.append(g)
 
-        if submitted:
-            st.session_state.giocatori_scelti = giocatori_scelti_temp
+        mancanti = num_squadre - len(giocatori_selezionati_temp)
+        if mancanti > 0:
+            st.markdown(f"### ? Aggiungi nuovi giocatori ({mancanti} slot)")
+            for i in range(mancanti):
+                col1, col2 = st.columns([0.2, 0.8])
+                with col1:
+                    aggiungi = st.checkbox(f"G{i+1}", value=True, key=f"nuovo_chk_{i}")
+                with col2:
+                    nome = st.text_input(f"Nome giocatore {i+1}", value=f"Ospite{i+1}", key=f"nuovo_nome_{i}")
+                if aggiungi:
+                    giocatori_selezionati_temp.append(nome)
+
+        if st.button("? Conferma giocatori"):
+            st.session_state.giocatori_scelti = giocatori_selezionati_temp
             st.session_state.nuovo_torneo_step = 2
 
     elif st.session_state.nuovo_torneo_step == 2:
         st.write(f"Club scelto: **{st.session_state.club_scelto}**")
-        try:
-            df_giocatori_csv = pd.read_csv(url_club[st.session_state.club_scelto])
-        except Exception as e:
-            st.warning(f"Impossibile caricare lista giocatori: {e}")
-            df_giocatori_csv = pd.DataFrame(columns=["Giocatore", "Squadra", "Potenziale"])
+
+        df_giocatori_csv = carica_csv_robusto_da_url(url_club[st.session_state.club_scelto])
 
         squadre_data = []
         for i, gioc in enumerate(st.session_state.giocatori_scelti):
-            if gioc == "(Nuovo giocatore)":
-                nome_giocatore = st.text_input(f"Nome giocatore {i+1}", value=f"Ospite{i+1}", key=f"new_giocatore_{i}")
+            if gioc not in df_giocatori_csv["Giocatore"].values:
+                nome_giocatore = st.text_input(f"Nome giocatore {i+1}", value=gioc, key=f"new_giocatore_{i}")
                 squadra_default = f"SquadraOspite{i+1}"
                 potenziale_default = 4
             else:
@@ -145,7 +177,7 @@ elif scelta == "🆕 Crea nuovo torneo":
                 "Potenziale": potenziale
             })
 
-        if st.button("✅ Conferma squadre e genera primo turno"):
+        if st.button("? Conferma squadre e genera primo turno"):
             df_squadre = pd.DataFrame(squadre_data)
             df_squadre["SquadraGiocatore"] = df_squadre.apply(lambda r: f"{r['Squadra']} ({r['Giocatore']})", axis=1)
             df_squadre = df_squadre.sort_values(by="Potenziale", ascending=False).reset_index(drop=True)
@@ -174,14 +206,14 @@ elif scelta == "🆕 Crea nuovo torneo":
             st.success("Primo turno generato! Puoi ora inserire i risultati.")
 
 # --- Nuovo turno ---
-st.subheader("🔁 Genera turno successivo")
-if st.button("➕ Nuovo turno"):
+st.subheader("?? Genera turno successivo")
+if st.button("? Nuovo turno"):
     partite_validate = st.session_state.df_torneo[st.session_state.df_torneo['Validata']]
     precedenti = set(zip(partite_validate['Casa'], partite_validate['Ospite']))
     classifica_attuale = aggiorna_classifica(st.session_state.df_torneo)
     nuove_partite = genera_accoppiamenti(classifica_attuale, precedenti)
     if nuove_partite.empty:
-        st.warning("⚠️ Nessuna nuova partita possibile.")
+        st.warning("?? Nessuna nuova partita possibile.")
     else:
         st.session_state.turno_attivo += 1
         nuove_partite["Turno"] = st.session_state.turno_attivo
@@ -197,7 +229,7 @@ if st.button("➕ Nuovo turno"):
 
 # --- Inserimento risultati ---
 if not st.session_state.df_torneo.empty:
-    st.subheader("📝 Inserisci / Modifica risultati")
+    st.subheader("?? Inserisci / Modifica risultati")
     for turno in sorted(st.session_state.df_torneo['Turno'].unique()):
         st.markdown(f"### Turno {turno}")
         container = st.container()
@@ -235,26 +267,26 @@ if not st.session_state.df_torneo.empty:
 
 # --- Classifica ---
 if not st.session_state.df_torneo.empty:
-    st.subheader("📊 Classifica")
+    st.subheader("?? Classifica")
     df_classifica = aggiorna_classifica(st.session_state.df_torneo)
     st.dataframe(df_classifica, use_container_width=True)
 
 # --- Tutte le giornate ---
 if not st.session_state.df_torneo.empty:
-    st.subheader("📅 Tutte le giornate / turni")
+    st.subheader("?? Tutte le giornate / turni")
     df_visual = st.session_state.df_torneo.copy()
     df_visual = df_visual.sort_values(by="Turno").reset_index(drop=True)
     df_visual_display = df_visual[["Turno", "Casa", "GolCasa", "Ospite", "GolOspite", "Validata"]]
     st.dataframe(df_visual_display, use_container_width=True)
 
 # --- Scarica torneo ---
-st.subheader("📥 Esporta CSV")
+st.subheader("?? Esporta CSV")
 nome_base = st.text_input("Nome torneo per salvataggio", value="torneo_subbuteo")
-if st.button("📤 Scarica CSV torneo"):
+if st.button("?? Scarica CSV torneo"):
     csv_data = st.session_state.df_torneo.to_csv(index=False)
     nome_file = f"{nome_base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    st.download_button(label="📥 Scarica torneo", data=csv_data, file_name=nome_file, mime="text/csv")
-if st.button("📤 Scarica classifica"):
+    st.download_button(label="?? Scarica torneo", data=csv_data, file_name=nome_file, mime="text/csv")
+if st.button("?? Scarica classifica"):
     csv_classifica = df_classifica.to_csv(index=False)
     nome_file_classifica = f"{nome_base}_classifica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    st.download_button(label="📥 Scarica classifica", data=csv_classifica, file_name=nome_file_classifica, mime="text/csv")
+    st.download_button(label="?? Scarica classifica", data=csv_classifica, file_name=nome_file_classifica, mime="text/csv")
