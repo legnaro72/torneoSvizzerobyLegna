@@ -278,7 +278,7 @@ if st.button("📤 Scarica classifica"):
 ChatGPT ha detto:
 Ho capito: vuoi rendere la fase di scelta dei giocatori più pratica su Android, passando da un elenco di selectbox (scomodo su schermi piccoli) a un sistema con check box di selezione rapida:
 
-Una check box “Seleziona tutti” per prendere tutti i giocatori già presenti nel CSV.
+Una check box "Seleziona tutti" per prendere tutti i giocatori già presenti nel CSV.
 
 Lista di check box singole per i giocatori disponibili del club.
 
@@ -288,7 +288,7 @@ Dopo questa fase, passare alla schermata di assegnazione squadre/potenziali come
 
 Per integrare questa modifica, possiamo:
 
-Step 1: Club + Numero squadre + check box “Seleziona tutti” + check box singole per i giocatori.
+Step 1: Club + Numero squadre + check box "Seleziona tutti" + check box singole per i giocatori.
 
 Step 1.5: Calcolo automatico di quanti slot rimangono → aggiunta G1, G2… con campo testo per nome.
 
@@ -306,7 +306,7 @@ Perfetto, allora ti riscrivo la parte di codice in cui c’è
 if st.session_state.nuovo_torneo_step == 1:
 in modo che sia già integrata nel tuo script e funzioni bene su Android, con:
 
-Check “Seleziona tutti” per il club scelto.
+Check "Seleziona tutti" per il club scelto.
 
 Check box singole per i giocatori del club.
 
@@ -379,7 +379,7 @@ ChatGPT ha detto:
 Perfetto 👍
 Ecco lo script completo integrato con la nuova fase di inserimento giocatori ottimizzata per Android.
 
-Ho modificato solo la parte nuovo_torneo_step == 1 mantenendo intatto tutto il resto, così funziona esattamente come il tuo originale ma con la selezione tramite check box + “Seleziona tutti” + nuovi giocatori automatici.
+Ho modificato solo la parte nuovo_torneo_step == 1 mantenendo intatto tutto il resto, così funziona esattamente come il tuo originale ma con la selezione tramite check box + "Seleziona tutti" + nuovi giocatori automatici.
 
 import streamlit as st
 import pandas as pd
@@ -663,11 +663,11 @@ Se vuoi, posso anche farti una versione con interfaccia a colonne più compatta 
 Hai detto:
 'utf-8' codec can't decode byte 0xe0 in position 1463: invalid continuation byte
 ChatGPT ha detto:
-Quell’errore indica che il file CSV che stai caricando non è salvato in UTF-8, quindi quando Python/Streamlit prova a leggerlo con encoding='utf-8' trova un byte (in questo caso 0xe0, cioè la “à” in qualche altra codifica) che non è valido per UTF-8.
+Quell’errore indica che il file CSV che stai caricando non è salvato in UTF-8, quindi quando Python/Streamlit prova a leggerlo con encoding='utf-8' trova un byte (in questo caso 0xe0, cioè la "à" in qualche altra codifica) che non è valido per UTF-8.
 
 Ci sono due soluzioni principali:
 
-1️⃣ Aprire il CSV in modalità “lettura universale”
+1️⃣ Aprire il CSV in modalità "lettura universale"
 Puoi forzare Pandas a usare una codifica più permissiva:
 
 df = pd.read_csv("file.csv", encoding="latin-1")  # oppure 'cp1252'
@@ -2355,7 +2355,7 @@ Ok, capisco la frustrazione, questo tipo di errore UTF-8 di solito deriva da:
 
 file CSV che non sono realmente UTF-8 ma ANSI o altro encoding (Windows-1252 o Latin1)
 
-o qualche carattere “sporco” nel file
+o qualche carattere "sporco" nel file
 
 oppure qualche problema nella lettura in Streamlit
 
@@ -2729,7 +2729,7 @@ che pallllleeeee 'utf-8' codec can't decode byte 0xe0 in position 2260: invalid 
 ChatGPT ha detto:
 Capisco benissimo la frustrazione! Questo errore è uno dei più fastidiosi quando i file CSV hanno encoding non uniformi o caratteri speciali.
 
-Ti propongo un approccio molto più “robusto” e sicuro per caricare il CSV da URL o file, cercando di bypassare questi problemi senza errori.
+Ti propongo un approccio molto più "robusto" e sicuro per caricare il CSV da URL o file, cercando di bypassare questi problemi senza errori.
 
 Soluzione super robusta per caricare CSV con problemi di encoding:
 import chardet
@@ -3507,7 +3507,7 @@ ChatGPT ha detto:
 Sì, è possibile, se stai tentando di leggere un file o un contenuto che non è effettivamente codificato in UTF-8.
 L’errore "utf-8 codec can't decode byte 0xe0..." significa proprio che il file contiene byte che non rispettano la codifica UTF-8.
 
-Nel mio script ti ho fatto leggere con latin1 proprio per evitare questo problema, perché latin1 (ISO-8859-1) è una codifica “single byte” e non produce errori di decodifica (anche se può mostrarti caratteri accentati non corretti se il file non è in quella codifica).
+Nel mio script ti ho fatto leggere con latin1 proprio per evitare questo problema, perché latin1 (ISO-8859-1) è una codifica "single byte" e non produce errori di decodifica (anche se può mostrarti caratteri accentati non corretti se il file non è in quella codifica).
 
 Se continui a vedere questo errore anche con il codice che ti ho dato, è perché probabilmente:
 
@@ -3653,7 +3653,7 @@ def modifica_risultati_compatti(df_giornata, key_prefix):
             with col2:
                 gol_ospite = st.number_input("Gol Ospite", 0, 20, key=f"{key_prefix}_ospite_{i}", value=int(r['GolOspite']) if pd.notna(r['GolOspite']) else 0)
             with col3:
-                valida = st.checkbox("âœ” Valida", key=f"{key_prefix}_valida_{i}", value=r['Valida'])
+                valida = st.checkbox("âœ" Valida", key=f"{key_prefix}_valida_{i}", value=r['Valida'])
             df_giornata.at[i, 'GolCasa'] = gol_casa
             df_giornata.at[i, 'GolOspite'] = gol_ospite
             df_giornata.at[i, 'Valida'] = valida
@@ -3769,14 +3769,14 @@ def main():
         if classifica.empty or 'Girone' not in classifica.columns:
             st.warning("Classifica non disponibile: nessuna partita valida o dati insufficienti.")
         else:
-            st.subheader(f"ðŸ“Š Classifica {girone_sel}")
+            st.subheader(f"ðŸ"Š Classifica {girone_sel}")
             st.dataframe(classifica[classifica['Girone'] == girone_sel], use_container_width=True)
 
         csv = st.session_state['df_torneo'].to_csv(index=False)
-        st.download_button("ðŸ“¥ Scarica CSV Torneo", csv, "torneo.csv", "text/csv")
+        st.download_button("ðŸ"¥ Scarica CSV Torneo", csv, "torneo.csv", "text/csv")
 
         # Pulsante mostra tutte le giornate per girone
-        if st.button("ðŸ“… Mostra tutte le giornate per girone"):
+        if st.button("ðŸ"… Mostra tutte le giornate per girone"):
             with st.expander(f"Tutte le giornate - {girone_sel}"):
                 giornate = sorted(df[df['Girone'] == girone_sel]['Giornata'].dropna().unique())
                 for g in giornate:
@@ -3785,7 +3785,7 @@ def main():
                     st.dataframe(df_giornata[['Casa','Ospite','GolCasa','GolOspite','Valida']], use_container_width=True)
 
         # Filtra partite da validare per squadra
-        st.subheader("ðŸ” Filtra partite da validare per squadra")
+        st.subheader("ðŸ" Filtra partite da validare per squadra")
         squadre = pd.unique(df[['Casa', 'Ospite']].values.ravel())
         squadra_scelta = st.selectbox("Seleziona squadra", squadre, key="filter_squadra")
 
@@ -3798,7 +3798,7 @@ def main():
 
 
     elif scelta == "Carica torneo da CSV":
-        file = st.file_uploader("ðŸ“‚ Carica file CSV", type="csv")
+        file = st.file_uploader("ðŸ"‚ Carica file CSV", type="csv")
         if file:
             try:
                 df_torneo = pd.read_csv(file, encoding='latin1')
@@ -4790,7 +4790,7 @@ if st.button("?? Scarica classifica"):
     st.download_button(label="?? Scarica classifica", data=csv_classifica, file_name=nome_file_classifica, mime="text/csv")
 ChatGPT ha detto:
 Chiaro! Gli emoji diventano ?? probabilmente perché il terminale o Streamlit non mostra bene quei caratteri speciali in locale o per encoding/font.
-Per migliorare la grafica senza emoji “problematiche”, ti propongo di:
+Per migliorare la grafica senza emoji "problematiche", ti propongo di:
 
 Usare icone unicode molto semplici (come ✨, ▶, ⚽, 📁, 📥) che generalmente si vedono meglio.
 
@@ -4798,7 +4798,7 @@ Utilizzare titoli in bold con un po' di markup Markdown
 
 Usare i colori base di Streamlit (con st.markdown e HTML minimale) per rendere più leggibile
 
-Rimuovere emoji troppo “esotiche” o che potrebbero non vedersi
+Rimuovere emoji troppo "esotiche" o che potrebbero non vedersi
 
 Ecco una versione più elegante, minimalista e sicura che funziona in locale e sul web:
 
@@ -5113,7 +5113,7 @@ continuano ed esserci ?? metti delle emoji
 ChatGPT ha detto:
 Certo! Se in locale o nel tuo terminale appaiono ?? è quasi sempre un problema di font o encoding che non supporta alcune emoji, ma se vuoi comunque provare con emoji più comuni e semplici (che funzionano quasi ovunque), posso inserirtele.
 
-Ecco una versione con emoji semplici, usate nelle app comuni e meno “esotiche”:
+Ecco una versione con emoji semplici, usate nelle app comuni e meno "esotiche":
 
 import streamlit as st
 import pandas as pd
