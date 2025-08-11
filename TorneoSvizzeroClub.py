@@ -3,11 +3,7 @@ import pandas as pd
 from datetime import datetime
 import requests
 import io
-
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib import colors
-from reportlab.platypus import Table, TableStyle
+import pdfkit
 
 st.set_page_config(page_title="Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
@@ -83,39 +79,32 @@ def carica_csv_robusto_da_file(file_buffer):
         st.warning(f"Errore caricamento CSV da file: {e}")
         return pd.DataFrame()
 
-def esporta_classifica_pdf(df_classifica):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
+def esporta_pdf_da_df(df, titolo="Classifica Torneo Subbuteo"):
+    # Genera tabella HTML dal DataFrame
+    html_string = df.to_html(classes='table table-striped', border=0, index=False)
 
-    data = [df_classifica.columns.to_list()] + df_classifica.values.tolist()
+    # HTML completo con stile base
+    html = f"""
+    <html>
+    <head>
+    <style>
+    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+    h1 {{ text-align: center; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid #dddddd; text-align: center; padding: 8px; }}
+    th {{ background-color: #f2f2f2; }}
+    </style>
+    </head>
+    <body>
+    <h1>{titolo}</h1>
+    {html_string}
+    </body>
+    </html>
+    """
 
-    table = Table(data)
-    style = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#004080")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 14),
-
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-    ])
-    table.setStyle(style)
-
-    table_width, table_height = table.wrap(0, 0)
-    x = (width - table_width) / 2
-    y = height - 100 - table_height
-
-    table.drawOn(c, x, y)
-    c.showPage()
-    c.save()
-
-    buffer.seek(0)
-    return buffer
+    # Genera PDF in memoria come bytes
+    pdf_bytes = pdfkit.from_string(html, False)
+    return pdf_bytes
 
 # --- Stato sessione ---
 if "df_torneo" not in st.session_state:
@@ -237,6 +226,7 @@ elif scelta == "🆕 Crea nuovo torneo":
             nuove_partite = genera_accoppiamenti(classifica_iniziale, set())
             nuove_partite["Turno"] = st.session_state.turno_attivo
 
+            # Assicura colonna Validata
             if 'Validata' not in nuove_partite.columns:
                 nuove_partite['Validata'] = False
 
@@ -255,6 +245,7 @@ elif scelta == "🆕 Crea nuovo torneo":
 # --- Nuovo turno ---
 st.subheader("▶️ Genera turno successivo")
 if st.button("🆕 Nuovo turno"):
+    # Assicurati colonna Validata esista
     if 'Validata' not in st.session_state.df_torneo.columns:
         st.session_state.df_torneo['Validata'] = False
     partite_validate = st.session_state.df_torneo[st.session_state.df_torneo['Validata']]
@@ -267,6 +258,7 @@ if st.button("🆕 Nuovo turno"):
         st.session_state.turno_attivo += 1
         nuove_partite["Turno"] = st.session_state.turno_attivo
 
+        # Assicura colonna Validata
         if 'Validata' not in nuove_partite.columns:
             nuove_partite['Validata'] = False
 
@@ -332,25 +324,9 @@ if not st.session_state.df_torneo.empty:
     df_visual_display = df_visual[["Turno", "Casa", "GolCasa", "Ospite", "GolOspite", "Validata"]]
     st.dataframe(df_visual_display, use_container_width=True)
 
-# --- Scarica torneo ---
-st.subheader("💾 Esporta CSV")
-nome_base = st.text_input("Nome torneo per salvataggio", value="torneo_subbuteo")
-if st.button("⬇️ Scarica CSV torneo"):
-    csv_data = st.session_state.df_torneo.to_csv(index=False)
-    nome_file = f"{nome_base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    st.download_button(label="⬇️ Scarica torneo", data=csv_data, file_name=nome_file, mime="text/csv")
-if st.button("⬇️ Scarica classifica"):
-    csv_classifica = df_classifica.to_csv(index=False)
-    nome_file_classifica = f"{nome_base}_classifica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    st.download_button(label="⬇️ Scarica classifica", data=csv_classifica, file_name=nome_file_classifica, mime="text/csv")
-
-# --- Scarica PDF classifica ---
+# --- Esporta PDF della classifica ---
 if not st.session_state.df_torneo.empty:
-    if st.button("📄 Scarica classifica PDF"):
-        pdf_buffer = esporta_classifica_pdf(df_classifica)
-        st.download_button(
-            label="📄 Scarica PDF classifica",
-            data=pdf_buffer,
-            file_name=f"classifica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-            mime="application/pdf"
-        )
+    st.subheader("📄 Esporta PDF classifica")
+    if st.button("⬇️ Genera e scarica PDF Classifica"):
+        pdf_bytes = esporta_pdf_da_df(df_classifica, "Classifica Torneo Subbuteo")
+        st.download_button(label="⬇️ Scarica PDF Classifica", data=pdf_bytes, file_name="classifica_torneo_subbuteo.pdf", mime="application/pdf")
