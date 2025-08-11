@@ -4,6 +4,11 @@ from datetime import datetime
 import requests
 import io
 
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle
+
 st.set_page_config(page_title="Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
 # --- Funzioni ---
@@ -77,6 +82,40 @@ def carica_csv_robusto_da_file(file_buffer):
     except Exception as e:
         st.warning(f"Errore caricamento CSV da file: {e}")
         return pd.DataFrame()
+
+def esporta_classifica_pdf(df_classifica):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    data = [df_classifica.columns.to_list()] + df_classifica.values.tolist()
+
+    table = Table(data)
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#004080")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+    ])
+    table.setStyle(style)
+
+    table_width, table_height = table.wrap(0, 0)
+    x = (width - table_width) / 2
+    y = height - 100 - table_height
+
+    table.drawOn(c, x, y)
+    c.showPage()
+    c.save()
+
+    buffer.seek(0)
+    return buffer
 
 # --- Stato sessione ---
 if "df_torneo" not in st.session_state:
@@ -198,7 +237,6 @@ elif scelta == "🆕 Crea nuovo torneo":
             nuove_partite = genera_accoppiamenti(classifica_iniziale, set())
             nuove_partite["Turno"] = st.session_state.turno_attivo
 
-            # Assicura colonna Validata
             if 'Validata' not in nuove_partite.columns:
                 nuove_partite['Validata'] = False
 
@@ -217,7 +255,6 @@ elif scelta == "🆕 Crea nuovo torneo":
 # --- Nuovo turno ---
 st.subheader("▶️ Genera turno successivo")
 if st.button("🆕 Nuovo turno"):
-    # Assicurati colonna Validata esista
     if 'Validata' not in st.session_state.df_torneo.columns:
         st.session_state.df_torneo['Validata'] = False
     partite_validate = st.session_state.df_torneo[st.session_state.df_torneo['Validata']]
@@ -230,7 +267,6 @@ if st.button("🆕 Nuovo turno"):
         st.session_state.turno_attivo += 1
         nuove_partite["Turno"] = st.session_state.turno_attivo
 
-        # Assicura colonna Validata
         if 'Validata' not in nuove_partite.columns:
             nuove_partite['Validata'] = False
 
@@ -307,3 +343,14 @@ if st.button("⬇️ Scarica classifica"):
     csv_classifica = df_classifica.to_csv(index=False)
     nome_file_classifica = f"{nome_base}_classifica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     st.download_button(label="⬇️ Scarica classifica", data=csv_classifica, file_name=nome_file_classifica, mime="text/csv")
+
+# --- Scarica PDF classifica ---
+if not st.session_state.df_torneo.empty:
+    if st.button("📄 Scarica classifica PDF"):
+        pdf_buffer = esporta_classifica_pdf(df_classifica)
+        st.download_button(
+            label="📄 Scarica PDF classifica",
+            data=pdf_buffer,
+            file_name=f"classifica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf"
+        )
