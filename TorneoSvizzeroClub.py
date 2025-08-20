@@ -471,3 +471,30 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             file_name=file_name_pdf,
             mime="application/pdf"
         )
+# -------------------------
+# Banner vincitore
+# -------------------------
+if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
+    # controlla se tutte le partite sono validate
+    tutte_validate = st.session_state.df_torneo['Validata'].all()
+
+    if tutte_validate:
+        df_class = aggiorna_classifica(st.session_state.df_torneo)
+        if not df_class.empty:
+            vincitore = df_class.iloc[0]['Squadra']
+
+            st.markdown(
+                f"""
+                <div style='background:linear-gradient(90deg, gold, orange); 
+                            padding:20px; 
+                            border-radius:12px; 
+                            text-align:center; 
+                            color:black; 
+                            font-size:28px; 
+                            font-weight:bold;
+                            margin-top:20px;'>
+                    🏆 Vincitore del torneo: {vincitore} 🏆
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
