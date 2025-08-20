@@ -7,19 +7,27 @@ from pymongo import MongoClient
 
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
-# -------------------------
-# Connessione a MongoDB Atlas
-# -------------------------
+# Passo 3.1: Connessione a MongoDB
+# La stringa di connessione è una variabile segreta in Streamlit Cloud
+# Per un test locale, puoi inserirla direttamente qui:
+#MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
+
+MONGO_URI = st.secrets["MONGO_URI"] 
+
+# Crea una connessione al client
 try:
-    MONGO_URI = st.secrets["MONGO_URI"]
-    client = MongoClient(MONGO_URI)
-    db = client.get_database("subbuteo_tournaments")
-    players_collection = db.get_collection("superba_players")
-    st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
+    client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
+    # Invia un ping al server per confermare la connessione
+    client.admin.command('ping')
+    st.sidebar.success("✅ Connessione a MongoDB riuscita!")
 except Exception as e:
-    st.error(f"❌ Errore di connessione a MongoDB: {e}. Assicurati di aver configurato la tua MONGO_URI.")
-    st.stop()
+    st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
+    st.stop() # Interrompe l'app se la connessione fallisce
+
+# Seleziona il database e la collezione
+db = client["giocatori_subbuteo"]
+collection = db["superba_players"]
 
 # -------------------------
 # Funzioni di utilità
