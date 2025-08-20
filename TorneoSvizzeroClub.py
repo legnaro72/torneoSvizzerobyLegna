@@ -389,19 +389,37 @@ if st.session_state.setup_mode == "nuovo":
             st.success("🏁 Primo turno generato! Ora sei nella vista torneo.")
             st.rerun()
 
-# -------------------------
-# Vista torneo attivo (solo dopo generazione o caricamento)
-# -------------------------
-if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    st.markdown("## 📅 Partite - Turno in corso")
-    # Mostra partite del turno attivo per default
-    # scelta turno (attivo o precedenti)
-    turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
-    turno_corrente = st.selectbox("📅 Seleziona turno", turni_disponibili, index=len(turni_disponibili)-1)
-    st.markdown(f"### 🔷 Turno selezionato: {turno_corrente}")
-    
-    df_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == turno_corrente].reset_index()
+            # -------------------------
+            # Vista torneo attivo (solo dopo generazione o caricamento)
+            # -------------------------
+            if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
+                st.markdown("## 🔷 Seleziona Turno")
+            
+            # ottieni tutti i turni presenti nel df
+            turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
+            
+            # --- Menu a tendina
+            turno_selezionato = st.selectbox(
+                "Seleziona turno dal menu a tendina",
+                turni_disponibili,
+                index=turni_disponibili.index(st.session_state.turno_attivo)
+            )
+            st.session_state.turno_attivo = turno_selezionato
+            
+            # --- Bottoni mutuamente esclusivi
+            st.markdown("### Oppure seleziona turno con i pulsanti:")
+            col_btns = st.columns(len(turni_disponibili))
+            for i, t in enumerate(turni_disponibili):
+                if col_btns[i].button(f"{t}", key=f"btn_turno_{t}"):
+                    st.session_state.turno_attivo = t
+                    st.experimental_rerun()  # forza il rerun per aggiornare vista partite
+            
+            st.markdown(f"### 🔹 Turno attivo: {st.session_state.turno_attivo}")
+            
+            # prepara df_turno filtrato
+            df_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].reset_index()
 
+    
     if df_turno.empty:
         st.info("Nessuna partita generata per il turno attivo. Premi 'Genera turno successivo' se tutte le partite validate.")
     else:
