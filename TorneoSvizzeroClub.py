@@ -418,19 +418,46 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
             st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
+
             c1, c2, c3, c4 = st.columns([3,1,1,0.8])
             with c1:
                 st.markdown(f"**{casa}** vs  **{osp}**")
+            
+            # --- inizializza solo se non esistono chiavi in session_state
+            if f"gc_{T}_{casa}_{osp}" not in st.session_state:
+                st.session_state[f"gc_{T}_{casa}_{osp}"] = int(row.get('GolCasa', 0))
+            if f"go_{T}_{casa}_{osp}" not in st.session_state:
+                st.session_state[f"go_{T}_{casa}_{osp}"] = int(row.get('GolOspite', 0))
+            if f"val_{T}_{casa}_{osp}" not in st.session_state:
+                st.session_state[f"val_{T}_{casa}_{osp}"] = bool(row.get('Validata', False))
+            
             with c2:
-                gol_casa = st.number_input("", min_value=0, max_value=20, value=st.session_state.risultati_temp[key_gc], key=key_gc)
+                st.session_state[f"gc_{T}_{casa}_{osp}"] = st.number_input(
+                    "", min_value=0, max_value=20, step=1,
+                    value=st.session_state[f"gc_{T}_{casa}_{osp}"],
+                    key=f"input_gc_{T}_{casa}_{osp}"
+                )
+            
             with c3:
-                gol_osp = st.number_input("", min_value=0, max_value=20, value=st.session_state.risultati_temp[key_go], key=key_go)
+                st.session_state[f"go_{T}_{casa}_{osp}"] = st.number_input(
+                    "", min_value=0, max_value=20, step=1,
+                    value=st.session_state[f"go_{T}_{casa}_{osp}"],
+                    key=f"input_go_{T}_{casa}_{osp}"
+                )
+            
             with c4:
-                validata = st.checkbox("Validata", value=st.session_state.risultati_temp[key_val], key=key_val)
-            # persisti in risultati_temp e nel df_torneo
-            st.session_state.risultati_temp[key_gc] = int(gol_casa)
-            st.session_state.risultati_temp[key_go] = int(gol_osp)
-            st.session_state.risultati_temp[key_val] = bool(validata)
+                st.session_state[f"val_{T}_{casa}_{osp}"] = st.checkbox(
+                    "Validata",
+                    value=st.session_state[f"val_{T}_{casa}_{osp}"],
+                    key=f"chk_val_{T}_{casa}_{osp}"
+                )
+            
+            # aggiorna df_torneo
+            st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[f"gc_{T}_{casa}_{osp}"]
+            st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[f"go_{T}_{casa}_{osp}"]
+            st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[f"val_{T}_{casa}_{osp}"]
+
+            
             # aggiorna df_torneo (modifica in session_state.df_torneo)
             st.session_state.df_torneo.at[idx, 'GolCasa'] = int(gol_casa)
             st.session_state.df_torneo.at[idx, 'GolOspite'] = int(gol_osp)
