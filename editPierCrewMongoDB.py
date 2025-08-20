@@ -9,7 +9,7 @@ from pymongo.server_api import ServerApi
 #MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
 
-mongo_uri = st.secrets["mongo_uri"] 
+MONGO_URI = st.secrets["MONGO_URI"] 
 
 # Crea una connessione al client
 try:
