@@ -187,7 +187,7 @@ if not st.session_state.torneo_iniziato:
                 init_results_temp_from_df(st.session_state.df_torneo)
                 st.session_state.torneo_iniziato = True
                 st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
-                st.experimental_rerun()  # per aggiornare UI e nascondere setup
+                st.rerun()  # per aggiornare UI e nascondere setup
 
     # Se scelgo nuovo torneo
     if st.session_state.setup_mode == "nuovo":
@@ -279,7 +279,7 @@ if not st.session_state.torneo_iniziato:
                 init_results_temp_from_df(st.session_state.df_torneo)
                 st.session_state.torneo_iniziato = True
                 st.success("🏁 Primo turno generato! Ora sei nella vista torneo.")
-                st.experimental_rerun()
+                st.rerun()
 
 # -------------------------
 # Vista torneo attivo (solo dopo generazione o caricamento)
@@ -357,7 +357,7 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
                 st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, nuove_partite], ignore_index=True)
                 init_results_temp_from_df(nuove_partite)
                 st.success(f"🎉 Turno {st.session_state.turno_attivo} generato!")
-                st.experimental_rerun()
+                st.rerun()
     with c_right:
         st.markdown("### 🏆 Classifica attuale")
         df_class = aggiorna_classifica(st.session_state.df_torneo)
