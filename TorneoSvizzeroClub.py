@@ -112,7 +112,7 @@ if "torneo_iniziato" not in st.session_state:
 if "setup_mode" not in st.session_state:
     st.session_state.setup_mode = None  # 'carica' | 'nuovo' | None
 if "nome_torneo" not in st.session_state:
-    st.session_state.nome_torneo = "TorneoSubbuteoSvizzero_"
+    st.session_state.nome_torneo = "Torneo Subbuteo - Sistema Svizzero"
 
 # -------------------------
 # Dati club (URL giocatori)
@@ -123,9 +123,10 @@ url_club = {
 }
 
 # -------------------------
-# Header - grande e pulito
+# Header - grande e pulito (dinamico)
 # -------------------------
-st.markdown("<div style='text-align:center; padding:10px 0'><h1 style='color:#0B5FFF;'>⚽ Torneo Subbuteo - Sistema Svizzero</h1></div>", unsafe_allow_html=True)
+header_text = st.session_state.nome_torneo
+st.markdown(f"<div style='text-align:center; padding:10px 0'><h1 style='color:#0B5FFF;'>⚽ {header_text}</h1></div>", unsafe_allow_html=True)
 
 # -------------------------
 # Se torneo non è iniziato e non è stato ancora selezionato un setup
@@ -202,9 +203,9 @@ if st.session_state.setup_mode == "nuovo":
 
     # Step 0: dare un nome al torneo
     if st.session_state.nuovo_torneo_step == 0:
-        nome_torneo_input = st.text_input("Dai un nome al tuo torneo", value=st.session_state.nome_torneo)
-        st.session_state.nome_torneo = nome_torneo_input
+        suffisso = st.text_input("Dai un nome al tuo torneo", value="", placeholder="Es. 'Campionato Invernale'")
         if st.button("Prossimo passo", key="next_step_0"):
+            st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero_{suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
             st.session_state.nuovo_torneo_step = 1
             st.rerun()
 
@@ -294,8 +295,8 @@ if st.session_state.setup_mode == "nuovo":
             nuove_partite = genera_accoppiamenti(classifica_iniziale, set())
             st.session_state.turno_attivo = 1
             nuove_partite["Turno"] = st.session_state.turno_attivo
-            st.session_state.df_torneo = nuove_partite.reset_index(drop=True)
-            init_results_temp_from_df(st.session_state.df_torneo)
+            st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, nuove_partite], ignore_index=True)
+            init_results_temp_from_df(nuove_partite)
             st.session_state.torneo_iniziato = True
             st.session_state.setup_mode = None # Nascondi la sezione di setup dopo la creazione
             st.success("🏁 Primo turno generato! Ora sei nella vista torneo.")
@@ -395,8 +396,9 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
         st.dataframe(df_visual[cols_to_show], use_container_width=True)
 
     st.markdown("### 💾 Esporta torneo")
-    nome_base = st.text_input("Nome file (base)", value=st.session_state.nome_torneo, key="nome_base")
     csv_data = st.session_state.df_torneo.to_csv(index=False).encode('utf-8')
+    # Prepara il nome del file usando il nome del torneo
+    file_name = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     st.download_button(label="⬇️ Scarica CSV torneo", data=csv_data,
-                       file_name=f"{nome_base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                       file_name=file_name,
                        mime="text/csv")
