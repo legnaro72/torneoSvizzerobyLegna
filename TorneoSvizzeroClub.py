@@ -63,30 +63,63 @@ def esporta_pdf(df_torneo, nome_torneo):
             pdf.cell(0, 8, line, ln=True)
 
     return pdf.output(dest="S").encode("latin-1")
+    
 def aggiorna_classifica(df):
     stats = {}
     for _, r in df.iterrows():
         if not bool(r.get('Validata', False)):
             continue
-        for squadra, gol, gol_avv in [(r['Casa'], int(r['GolCasa']), int(r['GolOspite'])),
-                                     (r['Ospite'], int(r['GolOspite']), int(r['GolCasa']))]:
+
+        casa, osp = r['Casa'], r['Ospite']
+        gc, go = int(r['GolCasa']), int(r['GolOspite'])
+
+        # inizializza squadre
+        for squadra in [casa, osp]:
             if squadra not in stats:
-                stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0}
-            stats[squadra]['GF'] += gol
-            stats[squadra]['GS'] += gol_avv
-        # punti (2 vittoria / 1 pareggio)
-        if int(r['GolCasa']) > int(r['GolOspite']):
-            stats[r['Casa']]['Punti'] += 2
-        elif int(r['GolCasa']) < int(r['GolOspite']):
-            stats[r['Ospite']]['Punti'] += 2
+                stats[squadra] = {
+                    'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0,
+                    'G': 0, 'V': 0, 'N': 0, 'P': 0
+                }
+
+        # aggiorna giocate
+        stats[casa]['G'] += 1
+        stats[osp]['G'] += 1
+        stats[casa]['GF'] += gc
+        stats[casa]['GS'] += go
+        stats[osp]['GF'] += go
+        stats[osp]['GS'] += gc
+
+        # esiti
+        if gc > go:
+            stats[casa]['Punti'] += 2
+            stats[casa]['V'] += 1
+            stats[osp]['P'] += 1
+        elif gc < go:
+            stats[osp]['Punti'] += 2
+            stats[osp]['V'] += 1
+            stats[casa]['P'] += 1
         else:
-            stats[r['Casa']]['Punti'] += 1
-            stats[r['Ospite']]['Punti'] += 1
+            stats[casa]['Punti'] += 1
+            stats[osp]['Punti'] += 1
+            stats[casa]['N'] += 1
+            stats[osp]['N'] += 1
 
     if not stats:
-        return pd.DataFrame(columns=['Squadra', 'Punti', 'GF', 'GS', 'DR'])
-    df_class = pd.DataFrame([{'Squadra': s, 'Punti': v['Punti'], 'GF': v['GF'], 'GS': v['GS'],
-                              'DR': v['GF'] - v['GS']} for s, v in stats.items()])
+        return pd.DataFrame(columns=['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR'])
+
+    df_class = pd.DataFrame([
+        {'Squadra': s,
+         'Punti': v['Punti'],
+         'G': v['G'],
+         'V': v['V'],
+         'N': v['N'],
+         'P': v['P'],
+         'GF': v['GF'],
+         'GS': v['GS'],
+         'DR': v['GF'] - v['GS']}
+        for s, v in stats.items()
+    ])
+
     df_class = df_class.sort_values(by=['Punti', 'DR', 'GF'], ascending=False).reset_index(drop=True)
     return df_class
 
@@ -362,10 +395,13 @@ if st.session_state.setup_mode == "nuovo":
 if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
     st.markdown("## 📅 Partite - Turno in corso")
     # Mostra partite del turno attivo per default
-    turno_corrente = st.session_state.turno_attivo
-    st.markdown(f"### 🔷 Turno attivo: {turno_corrente}")
-
+    # scelta turno (attivo o precedenti)
+    turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
+    turno_corrente = st.selectbox("📅 Seleziona turno", turni_disponibili, index=len(turni_disponibili)-1)
+    st.markdown(f"### 🔷 Turno selezionato: {turno_corrente}")
+    
     df_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == turno_corrente].reset_index()
+
     if df_turno.empty:
         st.info("Nessuna partita generata per il turno attivo. Premi 'Genera turno successivo' se tutte le partite validate.")
     else:
