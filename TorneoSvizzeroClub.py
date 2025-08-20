@@ -83,7 +83,7 @@ def genera_pdf(df_torneo, df_classifica):
         pdf.cell(0, 8, f"Turno {r['Turno']}: {r['Casa']} {r['GolCasa']} - {r['GolOspite']} {r['Ospite']}  {status}", ln=True)
     pdf.set_text_color(0, 0, 0)
 
-    return pdf.output(dest='S').encode('latin1')
+    return pdf.output(dest='S').encode('latin1', 'ignore')
 
 # =========================
 # Sidebar esportazioni
