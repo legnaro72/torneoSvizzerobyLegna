@@ -205,7 +205,7 @@ if st.session_state.setup_mode == "nuovo":
     if st.session_state.nuovo_torneo_step == 0:
         suffisso = st.text_input("Dai un nome al tuo torneo", value="", placeholder="Es. 'Campionato Invernale'")
         if st.button("Prossimo passo", key="next_step_0"):
-            st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero_{suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
+            st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero - {suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
             st.session_state.nuovo_torneo_step = 1
             st.rerun()
 
@@ -306,7 +306,7 @@ if st.session_state.setup_mode == "nuovo":
 # Vista torneo attivo (solo dopo generazione o caricamento)
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    st.markdown("## 📅 Partite — vista principale (solo torneo in corso)")
+    st.markdown("## 📅 Partite - Turno in corso")
     # Mostra partite del turno attivo per default
     turno_corrente = st.session_state.turno_attivo
     st.markdown(f"### 🔷 Turno attivo: {turno_corrente}")
