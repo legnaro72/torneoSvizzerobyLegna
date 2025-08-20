@@ -424,44 +424,45 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
                 st.markdown(f"**{casa}** vs  **{osp}**")
             
             # --- inizializza solo se non esistono chiavi in session_state
-            if f"gc_{T}_{casa}_{osp}" not in st.session_state:
-                st.session_state[f"gc_{T}_{casa}_{osp}"] = int(row.get('GolCasa', 0))
-            if f"go_{T}_{casa}_{osp}" not in st.session_state:
-                st.session_state[f"go_{T}_{casa}_{osp}"] = int(row.get('GolOspite', 0))
-            if f"val_{T}_{casa}_{osp}" not in st.session_state:
-                st.session_state[f"val_{T}_{casa}_{osp}"] = bool(row.get('Validata', False))
+            if key_gc not in st.session_state:
+                st.session_state[key_gc] = int(row.get('GolCasa', 0))
+            if key_go not in st.session_state:
+                st.session_state[key_go] = int(row.get('GolOspite', 0))
+            if key_val not in st.session_state:
+                st.session_state[key_val] = bool(row.get('Validata', False))
             
             with c2:
-                st.session_state[f"gc_{T}_{casa}_{osp}"] = st.number_input(
+                st.session_state[key_gc] = st.number_input(
                     "", min_value=0, max_value=20, step=1,
-                    value=st.session_state[f"gc_{T}_{casa}_{osp}"],
+                    value=st.session_state[key_gc],
                     key=f"input_gc_{T}_{casa}_{osp}"
                 )
             
             with c3:
-                st.session_state[f"go_{T}_{casa}_{osp}"] = st.number_input(
+                st.session_state[key_go] = st.number_input(
                     "", min_value=0, max_value=20, step=1,
-                    value=st.session_state[f"go_{T}_{casa}_{osp}"],
+                    value=st.session_state[key_go],
                     key=f"input_go_{T}_{casa}_{osp}"
                 )
             
             with c4:
-                st.session_state[f"val_{T}_{casa}_{osp}"] = st.checkbox(
+                st.session_state[key_val] = st.checkbox(
                     "Validata",
-                    value=st.session_state[f"val_{T}_{casa}_{osp}"],
+                    value=st.session_state[key_val],
                     key=f"chk_val_{T}_{casa}_{osp}"
                 )
             
-            # aggiorna df_torneo
-            st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[f"gc_{T}_{casa}_{osp}"]
-            st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[f"go_{T}_{casa}_{osp}"]
-            st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[f"val_{T}_{casa}_{osp}"]
+            # aggiorna df_torneo direttamente dai valori in session_state
+            st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[key_gc]
+            st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[key_go]
+            st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[key_val]
+
 
             
             # aggiorna df_torneo (modifica in session_state.df_torneo)
-            st.session_state.df_torneo.at[idx, 'GolCasa'] = int(gol_casa)
-            st.session_state.df_torneo.at[idx, 'GolOspite'] = int(gol_osp)
-            st.session_state.df_torneo.at[idx, 'Validata'] = bool(validata)
+            #st.session_state.df_torneo.at[idx, 'GolCasa'] = int(gol_casa)
+            #st.session_state.df_torneo.at[idx, 'GolOspite'] = int(gol_osp)
+            #st.session_state.df_torneo.at[idx, 'Validata'] = bool(validata)
 
     st.markdown("---")
     # Bottone per generare turno successivo
