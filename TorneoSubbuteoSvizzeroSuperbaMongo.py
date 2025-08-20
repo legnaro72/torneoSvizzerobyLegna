@@ -4,39 +4,34 @@ from datetime import datetime
 import io
 from fpdf import FPDF
 from pymongo import MongoClient
-# Aggiungi questa linea
 from pymongo.server_api import ServerApi
 
-
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
-
-# Passo 3.1: Connessione a MongoDB
-# La stringa di connessione è una variabile segreta in Streamlit Cloud
-# Per un test locale, puoi inserirla direttamente qui:
-#MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
-
-
-MONGO_URI = st.secrets["MONGO_URI"]
-
-# Crea una connessione al client
-try:
-    client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
-    # Invia un ping al server per confermare la connessione
-    client.admin.command('ping')
-    st.sidebar.success("✅ Connessione a MongoDB riuscita!")
-except Exception as e:
-    st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
-    st.stop() # Interrompe l'app se la connessione fallisce
-
-# Seleziona il database e la collezione
-db = client["giocatori_subbuteo"]
-collection = db["superba_players"]
 
 # -------------------------
 # Funzioni di utilità
 # -------------------------
 
+# ... (tutte le altre funzioni rimangono invariate) ...
+
+# Funzione di utilità per il caricamento dei giocatori
+def carica_giocatori_da_db():
+    # Verifica che la variabile players_collection sia definita e non sia None
+    if 'players_collection' in globals() and players_collection is not None:
+        try:
+            df = pd.DataFrame(list(players_collection.find()))
+            if '_id' in df.columns:
+                df = df.drop(columns=['_id'])
+            return df
+        except Exception as e:
+            st.error(f"❌ Errore durante la lettura dalla collection dei giocatori: {e}")
+            return pd.DataFrame()
+    else:
+        st.warning("⚠️ La connessione a MongoDB non è attiva.")
+        return pd.DataFrame()
+
 def esporta_pdf(df_torneo, nome_torneo):
+    #...
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
@@ -157,16 +152,6 @@ def carica_csv_robusto_da_file(file_buffer):
         st.warning(f"Errore caricamento CSV da file: {e}")
         return pd.DataFrame()
 
-def carica_giocatori_da_db():
-    try:
-        df = pd.DataFrame(list(players_collection.find()))
-        if '_id' in df.columns:
-            df = df.drop(columns=['_id'])
-        return df
-    except Exception as e:
-        st.warning(f"Errore caricamento giocatori da MongoDB: {e}")
-        return pd.DataFrame()
-
 def init_results_temp_from_df(df):
     for _, row in df.iterrows():
         T = row.get('Turno', 1)
@@ -178,6 +163,24 @@ def init_results_temp_from_df(df):
         st.session_state.risultati_temp.setdefault(key_gc, int(row.get('GolCasa', 0)))
         st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
         st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
+
+# -------------------------
+# Connessione a MongoDB Atlas
+# -------------------------
+
+# Inizializza la variabile a None per evitare il NameError
+players_collection = None
+try:
+    MONGO_URI = st.secrets["MONGO_URI"]
+    server_api = ServerApi('1')
+    client = MongoClient(MONGO_URI, server_api=server_api)
+    db = client.get_database("subbuteo_tournaments")
+    players_collection = db.get_collection("superba_players")
+    # Tenta una semplice operazione per testare la connessione
+    _ = players_collection.find_one()
+    st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
+except Exception as e:
+    st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare i giocatori dal database.")
 
 # -------------------------
 # Session state
