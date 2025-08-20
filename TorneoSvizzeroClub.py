@@ -394,7 +394,7 @@ if st.session_state.setup_mode == "nuovo":
             # -------------------------
             if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
                 st.markdown("## 🔷 Seleziona Turno")
-            
+
                 # ottieni tutti i turni presenti nel df
                 turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
                 
@@ -416,8 +416,56 @@ if st.session_state.setup_mode == "nuovo":
                 
                 st.markdown(f"### 🔹 Turno attivo: {st.session_state.turno_attivo}")
                 
-                # prepara df_turno filtrato
-                df_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].reset_index()
+                # --- df_turno filtrato sul turno attivo
+                df_turno = st.session_state.df_torneo[
+                    st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo
+                ].reset_index()
+                
+                if df_turno.empty:
+                    st.info("Nessuna partita generata per il turno selezionato.")
+                else:
+                    for _, row in df_turno.iterrows():
+                        idx = int(row['index'])
+                        T = int(row['Turno'])
+                        casa = row['Casa']
+                        osp = row['Ospite']
+                        key_gc = f"gc_{T}_{casa}_{osp}"
+                        key_go = f"go_{T}_{casa}_{osp}"
+                        key_val = f"val_{T}_{casa}_{osp}"
+                
+                        c1, c2, c3, c4 = st.columns([3,1,1,0.8])
+                        with c1:
+                            st.markdown(f"**{casa}** vs  **{osp}**")
+                
+                        # --- chiavi uniche per widget
+                        key_gc_input = f"gc_input_{T}_{casa}_{osp}"
+                        key_go_input = f"go_input_{T}_{casa}_{osp}"
+                        key_val_input = f"val_input_{T}_{casa}_{osp}"
+                
+                        # inizializzazione solo se non esistono
+                        if key_gc not in st.session_state:
+                            st.session_state[key_gc] = int(row.get('GolCasa', 0))
+                        if key_go not in st.session_state:
+                            st.session_state[key_go] = int(row.get('GolOspite', 0))
+                        if key_val not in st.session_state:
+                            st.session_state[key_val] = bool(row.get('Validata', False))
+                
+                        with c2:
+                            st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input)
+                            st.session_state[key_gc] = st.session_state[key_gc_input]
+                
+                        with c3:
+                            st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input)
+                            st.session_state[key_go] = st.session_state[key_go_input]
+                
+                        with c4:
+                            st.checkbox("Validata", key=key_val_input)
+                            st.session_state[key_val] = st.session_state[key_val_input]
+                
+                        # aggiorna df_torneo
+                        st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[key_gc]
+                        st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[key_go]
+                        st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[key_val]
 
     
     if df_turno.empty:
