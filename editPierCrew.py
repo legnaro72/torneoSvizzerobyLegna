@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from io import StringIO
 
-URL_CSV = "https://raw.githubusercontent.com/legnaro72/torneoSvizzerobyLegna/refs/heads/main/giocatoriPierCrew.csv"
+URL_CSV = "https://drive.google.com/file/d/1d9HJVNhbE4QCLjYDsFjp5hUJhs9d5IjQ/view?usp=sharing"
 
 st.set_page_config(page_title="Gestione Giocatori PierCrew", layout="wide")
 st.title("🎲 Gestione Giocatori PierCrew")
