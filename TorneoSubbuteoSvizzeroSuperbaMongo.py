@@ -9,19 +9,48 @@ from pymongo.server_api import ServerApi
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
 # -------------------------
+# Connessione a MongoDB Atlas
+# -------------------------
+
+players_collection = None
+st.info("Tentativo di connessione a MongoDB...")
+try:
+    MONGO_URI = st.secrets["MONGO_URI"]
+    server_api = ServerApi('1')
+    client = MongoClient(MONGO_URI, server_api=server_api)
+    db = client.get_database("subbuteo_tournaments")
+    players_collection = db.get_collection("superba_players")
+    # Tenta una semplice operazione per testare la connessione
+    _ = players_collection.find_one()
+    st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
+except Exception as e:
+    st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare i giocatori dal database.")
+
+# -------------------------
 # Funzioni di utilità
 # -------------------------
 
-# ... (tutte le altre funzioni rimangono invariate) ...
-
-# Funzione di utilità per il caricamento dei giocatori
 def carica_giocatori_da_db():
-    # Verifica che la variabile players_collection sia definita e non sia None
     if 'players_collection' in globals() and players_collection is not None:
         try:
+            # Controllo aggiunto per verificare se la collection esiste e ha documenti
+            count = players_collection.count_documents({})
+            if count == 0:
+                st.warning("⚠️ La collection 'superba_players' è vuota o non esiste. Non è stato caricato alcun giocatore.")
+                return pd.DataFrame()
+            else:
+                st.info(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
+            
             df = pd.DataFrame(list(players_collection.find()))
+            
             if '_id' in df.columns:
                 df = df.drop(columns=['_id'])
+            
+            # Controllo per la colonna 'Giocatore'
+            if 'Giocatore' not in df.columns:
+                st.error("❌ Errore: la colonna 'Giocatore' non è presente nel database dei giocatori.")
+                return pd.DataFrame()
+                
             return df
         except Exception as e:
             st.error(f"❌ Errore durante la lettura dalla collection dei giocatori: {e}")
@@ -29,6 +58,7 @@ def carica_giocatori_da_db():
     else:
         st.warning("⚠️ La connessione a MongoDB non è attiva.")
         return pd.DataFrame()
+
 
 def esporta_pdf(df_torneo, nome_torneo):
     #...
@@ -164,23 +194,6 @@ def init_results_temp_from_df(df):
         st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
         st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
-# -------------------------
-# Connessione a MongoDB Atlas
-# -------------------------
-
-# Inizializza la variabile a None per evitare il NameError
-players_collection = None
-try:
-    MONGO_URI = st.secrets["MONGO_URI"]
-    server_api = ServerApi('1')
-    client = MongoClient(MONGO_URI, server_api=server_api)
-    db = client.get_database("subbuteo_tournaments")
-    players_collection = db.get_collection("superba_players")
-    # Tenta una semplice operazione per testare la connessione
-    _ = players_collection.find_one()
-    st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
-except Exception as e:
-    st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare i giocatori dal database.")
 
 # -------------------------
 # Session state
