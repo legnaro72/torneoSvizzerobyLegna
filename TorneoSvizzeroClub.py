@@ -423,7 +423,12 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             with c1:
                 st.markdown(f"**{casa}** vs  **{osp}**")
             
-            # --- inizializza solo se non esistono chiavi in session_state
+            # --- chiavi uniche per session_state / widget
+            key_gc_input = f"gc_input_{T}_{casa}_{osp}"
+            key_go_input = f"go_input_{T}_{casa}_{osp}"
+            key_val_input = f"val_input_{T}_{casa}_{osp}"
+            
+            # inizializzazione solo se non esistono
             if key_gc not in st.session_state:
                 st.session_state[key_gc] = int(row.get('GolCasa', 0))
             if key_go not in st.session_state:
@@ -432,30 +437,30 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
                 st.session_state[key_val] = bool(row.get('Validata', False))
             
             with c2:
-                st.session_state[key_gc] = st.number_input(
+                # widget senza value=, gestito direttamente dal key
+                st.number_input(
                     "", min_value=0, max_value=20, step=1,
-                    value=st.session_state[key_gc],
-                    key=f"input_gc_{T}_{casa}_{osp}"
+                    key=key_gc_input
                 )
+                # sincronizza con session_state df
+                st.session_state[key_gc] = st.session_state[key_gc_input]
             
             with c3:
-                st.session_state[key_go] = st.number_input(
+                st.number_input(
                     "", min_value=0, max_value=20, step=1,
-                    value=st.session_state[key_go],
-                    key=f"input_go_{T}_{casa}_{osp}"
+                    key=key_go_input
                 )
+                st.session_state[key_go] = st.session_state[key_go_input]
             
             with c4:
-                st.session_state[key_val] = st.checkbox(
-                    "Validata",
-                    value=st.session_state[key_val],
-                    key=f"chk_val_{T}_{casa}_{osp}"
-                )
+                st.checkbox("Validata", key=key_val_input)
+                st.session_state[key_val] = st.session_state[key_val_input]
             
-            # aggiorna df_torneo direttamente dai valori in session_state
+            # aggiorna df_torneo
             st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[key_gc]
             st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[key_go]
             st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[key_val]
+
 
 
             
