@@ -393,18 +393,39 @@ if st.session_state.setup_mode == "nuovo":
 # -------------------------
 # Vista torneo attivo (solo dopo generazione o caricamento)
 # -------------------------
+# Vista torneo attivo (solo dopo generazione o caricamento)
+# -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    st.markdown("## 📅 Partite - Turno in corso")
-    # Mostra partite del turno attivo per default
-    # scelta turno (attivo o precedenti)
+
+    # scelta modalità vista turno
+    modo_vista = st.radio(
+        "Seleziona modalità di visualizzazione turni:",
+        options=["Menu a tendina", "Bottoni"],
+        index=0
+    )
+
     turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
-    turno_corrente = st.selectbox("📅 Seleziona turno", turni_disponibili, index=len(turni_disponibili)-1)
+
+    if modo_vista == "Menu a tendina":
+        turno_corrente = st.selectbox(
+            "🔹 Seleziona turno", 
+            turni_disponibili, 
+            index=len(turni_disponibili)-1
+        )
+    else:  # modalità bottoni
+        st.markdown("🔹 Seleziona turno:")
+        col_btns = st.columns(len(turni_disponibili))
+        turno_corrente = turni_disponibili[-1]  # default ultimo turno
+        for i, T in enumerate(turni_disponibili):
+            if col_btns[i].button(f"Turno {T}"):
+                turno_corrente = T
+
     st.markdown(f"### 🔷 Turno selezionato: {turno_corrente}")
-    
+
     df_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == turno_corrente].reset_index()
 
     if df_turno.empty:
-        st.info("Nessuna partita generata per il turno attivo. Premi 'Genera turno successivo' se tutte le partite validate.")
+        st.info("Nessuna partita generata per questo turno. Premi 'Genera turno successivo' se tutte le partite validate.")
     else:
         for _, row in df_turno.iterrows():
             idx = int(row['index'])
@@ -414,61 +435,44 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             key_gc = f"gc_{T}_{casa}_{osp}"
             key_go = f"go_{T}_{casa}_{osp}"
             key_val = f"val_{T}_{casa}_{osp}"
+
             # inizializza se mancanti
             st.session_state.risultati_temp.setdefault(key_gc, int(row.get('GolCasa', 0)))
             st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
             st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
-
             c1, c2, c3, c4 = st.columns([3,1,1,0.8])
             with c1:
-                st.markdown(f"**{casa}** vs  **{osp}**")
-            
-            # --- chiavi uniche per session_state / widget
+                st.markdown(f"**{casa}** vs  **{osp}**")
+
+            # chiavi uniche per widget
             key_gc_input = f"gc_input_{T}_{casa}_{osp}"
             key_go_input = f"go_input_{T}_{casa}_{osp}"
             key_val_input = f"val_input_{T}_{casa}_{osp}"
-            
-            # inizializzazione solo se non esistono
+
             if key_gc not in st.session_state:
                 st.session_state[key_gc] = int(row.get('GolCasa', 0))
             if key_go not in st.session_state:
                 st.session_state[key_go] = int(row.get('GolOspite', 0))
             if key_val not in st.session_state:
                 st.session_state[key_val] = bool(row.get('Validata', False))
-            
+
             with c2:
-                # widget senza value=, gestito direttamente dal key
-                st.number_input(
-                    "", min_value=0, max_value=20, step=1,
-                    key=key_gc_input
-                )
-                # sincronizza con session_state df
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input)
                 st.session_state[key_gc] = st.session_state[key_gc_input]
-            
+
             with c3:
-                st.number_input(
-                    "", min_value=0, max_value=20, step=1,
-                    key=key_go_input
-                )
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input)
                 st.session_state[key_go] = st.session_state[key_go_input]
-            
+
             with c4:
                 st.checkbox("Validata", key=key_val_input)
                 st.session_state[key_val] = st.session_state[key_val_input]
-            
+
             # aggiorna df_torneo
             st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[key_gc]
             st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[key_go]
             st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[key_val]
-
-
-
-            
-            # aggiorna df_torneo (modifica in session_state.df_torneo)
-            #st.session_state.df_torneo.at[idx, 'GolCasa'] = int(gol_casa)
-            #st.session_state.df_torneo.at[idx, 'GolOspite'] = int(gol_osp)
-            #st.session_state.df_torneo.at[idx, 'Validata'] = bool(validata)
 
     st.markdown("---")
     # Bottone per generare turno successivo
