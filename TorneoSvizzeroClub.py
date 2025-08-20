@@ -126,9 +126,9 @@ url_club = {
 st.markdown("<div style='text-align:center; padding:10px 0'><h1 style='color:#0B5FFF;'>⚽ Torneo Subbuteo - Sistema Svizzero</h1></div>", unsafe_allow_html=True)
 
 # -------------------------
-# Se torneo non è iniziato: mostra grandi box di scelta
+# Se torneo non è iniziato e non è stato ancora selezionato un setup
 # -------------------------
-if not st.session_state.torneo_iniziato:
+if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
     st.markdown("### Scegli azione")
     c1, c2 = st.columns([1,1])
     with c1:
@@ -141,7 +141,7 @@ if not st.session_state.torneo_iniziato:
         )
         if st.button("Carica torneo (CSV)", key="btn_carica"):
             st.session_state.setup_mode = "carica"
-
+            st.rerun() # Forza il ricaricamento
     with c2:
         st.markdown(
             """<div style='background:#fff8e6; border-radius:8px; padding:18px; text-align:center'>
@@ -154,132 +154,139 @@ if not st.session_state.torneo_iniziato:
             st.session_state.setup_mode = "nuovo"
             st.session_state.nuovo_torneo_step = 1
             st.session_state.giocatori_scelti = []
+            st.rerun() # Forza il ricaricamento
 
     st.markdown("---")
 
-    # Se scelgo carica
-    if st.session_state.setup_mode == "carica":
-        st.markdown("#### 📥 Carica CSV torneo")
-        file = st.file_uploader("Carica file CSV del torneo (es. esportazione dell'app)", type="csv")
-        if file:
-            df = carica_csv_robusto_da_file(file)
-            if not df.empty:
-                # validazione colonne minime e normalizzazione
-                # assicurati che esistano le colonne attese
-                for col in ['Casa','Ospite','GolCasa','GolOspite','Validata','Turno']:
-                    if col not in df.columns:
-                        if col in ['GolCasa','GolOspite']:
-                            df[col] = 0
-                        elif col == 'Validata':
-                            df[col] = False
-                        elif col == 'Turno':
-                            df['Turno'] = 1
-                        else:
-                            st.warning(f"Colonna {col} mancante nel CSV; il file potrebbe non contenere le info attese.")
-                # cast appropriati
-                df['GolCasa'] = df['GolCasa'].fillna(0).astype(int)
-                df['GolOspite'] = df['GolOspite'].fillna(0).astype(int)
-                df['Validata'] = df['Validata'].astype(bool)
-                if 'Turno' not in df.columns:
-                    df['Turno'] = 1
-                st.session_state.df_torneo = df.reset_index(drop=True)
-                st.session_state.turno_attivo = int(st.session_state.df_torneo['Turno'].max())
-                init_results_temp_from_df(st.session_state.df_torneo)
-                st.session_state.torneo_iniziato = True
-                st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
-                st.rerun()  # per aggiornare UI e nascondere setup
+# -------------------------
+# Logica di caricamento o creazione torneo (fuori dal blocco di scelta)
+# -------------------------
+# Se scelgo carica
+if st.session_state.setup_mode == "carica":
+    st.markdown("#### 📥 Carica CSV torneo")
+    file = st.file_uploader("Carica file CSV del torneo (es. esportazione dell'app)", type="csv")
+    if file:
+        df = carica_csv_robusto_da_file(file)
+        if not df.empty:
+            # validazione colonne minime e normalizzazione
+            # assicurati che esistano le colonne attese
+            for col in ['Casa','Ospite','GolCasa','GolOspite','Validata','Turno']:
+                if col not in df.columns:
+                    if col in ['GolCasa','GolOspite']:
+                        df[col] = 0
+                    elif col == 'Validata':
+                        df[col] = False
+                    elif col == 'Turno':
+                        df['Turno'] = 1
+                    else:
+                        st.warning(f"Colonna {col} mancante nel CSV; il file potrebbe non contenere le info attese.")
+            # cast appropriati
+            df['GolCasa'] = df['GolCasa'].fillna(0).astype(int)
+            df['GolOspite'] = df['GolOspite'].fillna(0).astype(int)
+            df['Validata'] = df['Validata'].astype(bool)
+            if 'Turno' not in df.columns:
+                df['Turno'] = 1
+            st.session_state.df_torneo = df.reset_index(drop=True)
+            st.session_state.turno_attivo = int(st.session_state.df_torneo['Turno'].max())
+            init_results_temp_from_df(st.session_state.df_torneo)
+            st.session_state.torneo_iniziato = True
+            st.session_state.setup_mode = None # Nascondi la sezione di setup dopo il caricamento
+            st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
+            st.rerun()  # per aggiornare UI e nascondere setup
 
-    # Se scelgo nuovo torneo
-    if st.session_state.setup_mode == "nuovo":
-        st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
-        # Step 1: scelta club e giocatori
-        if st.session_state.nuovo_torneo_step == 1:
-            club = st.selectbox("Scegli il Club", list(url_club.keys()), index=0)
-            st.session_state.club_scelto = club
-            df_gioc = carica_csv_robusto_da_url(url_club[club])
-            st.markdown("**Numero partecipanti** (min 2)")
-            num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
-            st.markdown("### 👥 Seleziona i giocatori del club")
-            giocatori_club = []
-            if not df_gioc.empty and 'Giocatore' in df_gioc.columns:
-                giocatori_club = df_gioc["Giocatore"].dropna().astype(str).tolist()
+# Se scelgo nuovo torneo
+if st.session_state.setup_mode == "nuovo":
+    st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
+    # Step 1: scelta club e giocatori
+    if st.session_state.nuovo_torneo_step == 1:
+        club = st.selectbox("Scegli il Club", list(url_club.keys()), index=0)
+        st.session_state.club_scelto = club
+        df_gioc = carica_csv_robusto_da_url(url_club[club])
+        st.markdown("**Numero partecipanti** (min 2)")
+        num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
+        st.markdown("### 👥 Seleziona i giocatori del club")
+        giocatori_club = []
+        if not df_gioc.empty and 'Giocatore' in df_gioc.columns:
+            giocatori_club = df_gioc["Giocatore"].dropna().astype(str).tolist()
 
-            seleziona_tutti = st.checkbox("Seleziona tutti i giocatori del club", key="sel_all")
-            giocatori_selezionati_temp = []
+        seleziona_tutti = st.checkbox("Seleziona tutti i giocatori del club", key="sel_all")
+        giocatori_selezionati_temp = []
 
-            # mostra elenco giocatori del club come checkbox
-            if giocatori_club:
-                for g in giocatori_club:
-                    checked = seleziona_tutti
-                    if st.checkbox(g, value=checked, key=f"chk_{g}"):
-                        giocatori_selezionati_temp.append(g)
+        # mostra elenco giocatori del club come checkbox
+        if giocatori_club:
+            for g in giocatori_club:
+                checked = seleziona_tutti
+                if st.checkbox(g, value=checked, key=f"chk_{g}"):
+                    giocatori_selezionati_temp.append(g)
 
-            # aggiungi ospiti per riempire il numero
-            mancanti = num_squadre - len(giocatori_selezionati_temp)
-            if mancanti > 0:
-                st.markdown(f"### ➕ Aggiungi nuovi giocatori ({mancanti} slot)")
-                for i in range(mancanti):
-                    col1, col2 = st.columns([0.15, 0.85])
-                    with col1:
-                        aggiungi = st.checkbox(f"Aggiungi slot {i+1}", value=True, key=f"aggiungi_{i}")
-                    with col2:
-                        nome = st.text_input(f"Nome mancanti {i+1}", value=f"Ospite{i+1}", key=f"nome_manc_{i}")
-                    if aggiungi:
-                        giocatori_selezionati_temp.append(nome)
+        # aggiungi ospiti per riempire il numero
+        mancanti = num_squadre - len(giocatori_selezionati_temp)
+        if mancanti > 0:
+            st.markdown(f"### ➕ Aggiungi nuovi giocatori ({mancanti} slot)")
+            for i in range(mancanti):
+                col1, col2 = st.columns([0.15, 0.85])
+                with col1:
+                    aggiungi = st.checkbox(f"Aggiungi slot {i+1}", value=True, key=f"aggiungi_{i}")
+                with col2:
+                    nome = st.text_input(f"Nome mancanti {i+1}", value=f"Ospite{i+1}", key=f"nome_manc_{i}")
+                if aggiungi:
+                    giocatori_selezionati_temp.append(nome)
 
-            st.markdown("---")
-            if st.button("✅ Conferma giocatori", key="conf_gioc"):
-                if len(giocatori_selezionati_temp) < 2:
-                    st.warning("Servono almeno 2 giocatori.")
-                else:
-                    st.session_state.giocatori_scelti = giocatori_selezionati_temp
-                    st.session_state.nuovo_torneo_step = 2
-                    st.success("Giocatori confermati — procedi a definire squadre e potenziali.")
+        st.markdown("---")
+        if st.button("✅ Conferma giocatori", key="conf_gioc"):
+            if len(giocatori_selezionati_temp) < 2:
+                st.warning("Servono almeno 2 giocatori.")
+            else:
+                st.session_state.giocatori_scelti = giocatori_selezionati_temp
+                st.session_state.nuovo_torneo_step = 2
+                st.success("Giocatori confermati — procedi a definire squadre e potenziali.")
+                st.rerun() # Forza il ricaricamento
 
-        # Step 2: conferma squadre e potenziale
-        elif st.session_state.nuovo_torneo_step == 2:
-            st.markdown("### 🏷️ Definisci Squadre e Potenziali")
-            df_gioc = carica_csv_robusto_da_url(url_club[st.session_state.club_scelto]) if st.session_state.club_scelto else pd.DataFrame()
-            squadre_data = []
-            for i, gioc in enumerate(st.session_state.giocatori_scelti):
-                # precompila nome e squadra dal CSV club se presente
-                if not df_gioc.empty and 'Giocatore' in df_gioc.columns and gioc in df_gioc['Giocatore'].values:
-                    riga = df_gioc[df_gioc['Giocatore'] == gioc].iloc[0]
-                    squadra_default = riga['Squadra'] if 'Squadra' in riga and pd.notna(riga['Squadra']) else f"Squadra{i+1}"
-                    try:
-                        pot_def = int(riga['Potenziale']) if 'Potenziale' in riga and pd.notna(riga['Potenziale']) else 4
-                    except:
-                        pot_def = 4
-                else:
-                    squadra_default = f"Squadra{i+1}"
+    # Step 2: conferma squadre e potenziale
+    elif st.session_state.nuovo_torneo_step == 2:
+        st.markdown("### 🏷️ Definisci Squadre e Potenziali")
+        df_gioc = carica_csv_robusto_da_url(st.session_state.club_scelto) if st.session_state.club_scelto else pd.DataFrame()
+        squadre_data = []
+        for i, gioc in enumerate(st.session_state.giocatori_scelti):
+            # precompila nome e squadra dal CSV club se presente
+            if not df_gioc.empty and 'Giocatore' in df_gioc.columns and gioc in df_gioc['Giocatore'].values:
+                riga = df_gioc[df_gioc['Giocatore'] == gioc].iloc[0]
+                squadra_default = riga['Squadra'] if 'Squadra' in riga and pd.notna(riga['Squadra']) else f"Squadra{i+1}"
+                try:
+                    pot_def = int(riga['Potenziale']) if 'Potenziale' in riga and pd.notna(riga['Potenziale']) else 4
+                except:
                     pot_def = 4
+            else:
+                squadra_default = f"Squadra{i+1}"
+                pot_def = 4
 
-                nome_gioc = st.text_input(f"Nome giocatore {i+1}", value=gioc, key=f"g_{i}")
-                squadra = st.text_input(f"Squadra {i+1}", value=squadra_default, key=f"s_{i}")
-                pot = st.slider(f"Potenziale {i+1}", 1, 10, value=pot_def, key=f"p_{i}")
-                squadre_data.append({"Giocatore": nome_gioc, "Squadra": squadra, "Potenziale": pot})
+            nome_gioc = st.text_input(f"Nome giocatore {i+1}", value=gioc, key=f"g_{i}")
+            squadra = st.text_input(f"Squadra {i+1}", value=squadra_default, key=f"s_{i}")
+            pot = st.slider(f"Potenziale {i+1}", 1, 10, value=pot_def, key=f"p_{i}")
+            squadre_data.append({"Giocatore": nome_gioc, "Squadra": squadra, "Potenziale": pot})
 
-            st.markdown("---")
-            if st.button("✅ Conferma squadre e genera primo turno", key="gen1"):
-                # crea df_squadre organizzato per potenziale
-                df_squadre = pd.DataFrame(squadre_data)
-                df_squadre["SquadraGiocatore"] = df_squadre.apply(lambda r: f"{r['Squadra']} ({r['Giocatore']})", axis=1)
-                df_squadre = df_squadre.sort_values(by="Potenziale", ascending=False).reset_index(drop=True)
-                st.session_state.df_squadre = df_squadre
+        st.markdown("---")
+        if st.button("✅ Conferma squadre e genera primo turno", key="gen1"):
+            # crea df_squadre organizzato per potenziale
+            df_squadre = pd.DataFrame(squadre_data)
+            df_squadre["SquadraGiocatore"] = df_squadre.apply(lambda r: f"{r['Squadra']} ({r['Giocatore']})", axis=1)
+            df_squadre = df_squadre.sort_values(by="Potenziale", ascending=False).reset_index(drop=True)
+            st.session_state.df_squadre = df_squadre
 
-                # classifica iniziale e generazione primo turno
-                classifica_iniziale = pd.DataFrame({
-                    'Squadra': df_squadre['SquadraGiocatore'],
-                    'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0
-                })
-                nuove_partite = genera_accoppiamenti(classifica_iniziale, set())
-                st.session_state.turno_attivo = 1
-                nuove_partite["Turno"] = st.session_state.turno_attivo
-                st.session_state.df_torneo = nuove_partite.reset_index(drop=True)
-                init_results_temp_from_df(st.session_state.df_torneo)
-                st.session_state.torneo_iniziato = True
-                st.success("🏁 Primo turno generato! Ora sei nella vista torneo.")
-                st.rerun()
+            # classifica iniziale e generazione primo turno
+            classifica_iniziale = pd.DataFrame({
+                'Squadra': df_squadre['SquadraGiocatore'],
+                'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0
+            })
+            nuove_partite = genera_accoppiamenti(classifica_iniziale, set())
+            st.session_state.turno_attivo = 1
+            nuove_partite["Turno"] = st.session_state.turno_attivo
+            st.session_state.df_torneo = nuove_partite.reset_index(drop=True)
+            init_results_temp_from_df(st.session_state.df_torneo)
+            st.session_state.torneo_iniziato = True
+            st.session_state.setup_mode = None # Nascondi la sezione di setup dopo la creazione
+            st.success("🏁 Primo turno generato! Ora sei nella vista torneo.")
+            st.rerun()
 
 # -------------------------
 # Vista torneo attivo (solo dopo generazione o caricamento)
@@ -309,7 +316,7 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
 
             c1, c2, c3, c4 = st.columns([3,1,1,0.8])
             with c1:
-                st.markdown(f"**{casa}**  vs  **{osp}**")
+                st.markdown(f"**{casa}** vs  **{osp}**")
             with c2:
                 gol_casa = st.number_input("", min_value=0, max_value=20, value=st.session_state.risultati_temp[key_gc], key=key_gc)
             with c3:
@@ -380,4 +387,3 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
     st.download_button(label="⬇️ Scarica CSV torneo", data=csv_data,
                        file_name=f"{nome_base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                        mime="text/csv")
-
