@@ -4,24 +4,18 @@ import pandas as pd
 from datetime import datetime
 import requests
 import io
-from fpdf import FPDF   # <--- aggiunto import per PDF
-
+from fpdf import FPDF
 
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
 # -------------------------
-# Funzioni di utilità
-# -------------------------
-
-# -------------------------
-# Funzione export PDF
+# Funzioni utilità
 # -------------------------
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
 
-    # Titolo torneo
     titolo = nome_torneo.encode("latin-1", "ignore").decode("latin-1")
     pdf.cell(0, 10, titolo, ln=True, align="C")
 
@@ -43,13 +37,12 @@ def esporta_pdf(df_torneo, nome_torneo):
         match_text = match_text.encode("latin-1", "ignore").decode("latin-1")
 
         if bool(r["Validata"]):
-            pdf.set_text_color(0, 0, 0)   # nero
+            pdf.set_text_color(0, 128, 0)   # verde per partite validate
         else:
-            pdf.set_text_color(255, 0, 0) # rosso
+            pdf.set_text_color(255, 0, 0)   # rosso per partite da giocare
 
         pdf.cell(0, 8, match_text, ln=True)
 
-    # Classifica finale
     pdf.ln(10)
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", "B", 12)
@@ -64,33 +57,23 @@ def esporta_pdf(df_torneo, nome_torneo):
             pdf.cell(0, 8, line, ln=True)
 
     return pdf.output(dest="S").encode("latin-1")
-    
+
 def aggiorna_classifica(df):
     stats = {}
     for _, r in df.iterrows():
         if not bool(r.get('Validata', False)):
             continue
-
         casa, osp = r['Casa'], r['Ospite']
         gc, go = int(r['GolCasa']), int(r['GolOspite'])
-
-        # inizializza squadre
         for squadra in [casa, osp]:
             if squadra not in stats:
-                stats[squadra] = {
-                    'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0,
-                    'G': 0, 'V': 0, 'N': 0, 'P': 0
-                }
-
-        # aggiorna giocate
+                stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0, 'G': 0, 'V': 0, 'N': 0, 'P': 0}
         stats[casa]['G'] += 1
         stats[osp]['G'] += 1
         stats[casa]['GF'] += gc
         stats[casa]['GS'] += go
         stats[osp]['GF'] += go
         stats[osp]['GS'] += gc
-
-        # esiti
         if gc > go:
             stats[casa]['Punti'] += 2
             stats[casa]['V'] += 1
@@ -120,12 +103,10 @@ def aggiorna_classifica(df):
          'DR': v['GF'] - v['GS']}
         for s, v in stats.items()
     ])
-
     df_class = df_class.sort_values(by=['Punti', 'DR', 'GF'], ascending=False).reset_index(drop=True)
     return df_class
 
 def genera_accoppiamenti(classifica, precedenti):
-    # classifica: DataFrame con colonna 'Squadra'
     accoppiamenti = []
     gia_abbinati = set()
     for i, r1 in classifica.iterrows():
@@ -164,7 +145,6 @@ def carica_csv_robusto_da_file(file_buffer):
         return pd.DataFrame()
 
 def init_results_temp_from_df(df):
-    # inizializza risultati_temp per ogni riga del df torneo
     for _, row in df.iterrows():
         T = row.get('Turno', 1)
         casa = row['Casa']
@@ -177,33 +157,26 @@ def init_results_temp_from_df(df):
         st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
 # -------------------------
-# Inizializzazione session_state
+# Session state
 # -------------------------
-if "df_torneo" not in st.session_state:
-    st.session_state.df_torneo = pd.DataFrame()
-if "df_squadre" not in st.session_state:
-    st.session_state.df_squadre = pd.DataFrame()
-if "turno_attivo" not in st.session_state:
-    st.session_state.turno_attivo = 0
-if "risultati_temp" not in st.session_state:
-    st.session_state.risultati_temp = {}
-if "nuovo_torneo_step" not in st.session_state:
-    st.session_state.nuovo_torneo_step = 1
-if "club_scelto" not in st.session_state:
-    st.session_state.club_scelto = None
-if "giocatori_scelti" not in st.session_state:
-    st.session_state.giocatori_scelti = []
-if "squadre_data" not in st.session_state:
-    st.session_state.squadre_data = []
-if "torneo_iniziato" not in st.session_state:
-    st.session_state.torneo_iniziato = False
-if "setup_mode" not in st.session_state:
-    st.session_state.setup_mode = None  # 'carica' | 'nuovo' | None
-if "nome_torneo" not in st.session_state:
-    st.session_state.nome_torneo = "Torneo Subbuteo - Sistema Svizzero"
+for key, default in {
+    "df_torneo": pd.DataFrame(),
+    "df_squadre": pd.DataFrame(),
+    "turno_attivo": 0,
+    "risultati_temp": {},
+    "nuovo_torneo_step": 1,
+    "club_scelto": None,
+    "giocatori_scelti": [],
+    "squadre_data": [],
+    "torneo_iniziato": False,
+    "setup_mode": None,
+    "nome_torneo": "Torneo Subbuteo - Sistema Svizzero"
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # -------------------------
-# Dati club (URL giocatori)
+# Dati club
 # -------------------------
 url_club = {
     "Superba": "https://raw.githubusercontent.com/legnaro72/torneoSvizzerobyLegna/refs/heads/main/giocatoriSuperba.csv",
@@ -211,10 +184,25 @@ url_club = {
 }
 
 # -------------------------
-# Header - grande e pulito (dinamico)
+# Header grafico
 # -------------------------
-header_text = st.session_state.nome_torneo
-st.markdown(f"<div style='text-align:center; padding:10px 0'><h1 style='color:#0B5FFF;'>⚽ {header_text}</h1></div>", unsafe_allow_html=True)
+st.markdown(f"""
+<div style='text-align:center; padding:20px; border-radius:12px; background: linear-gradient(to right, #ffefba, #ffffff);'>
+    <h1 style='color:#0B5FFF;'>⚽ {st.session_state.nome_torneo} 🏆</h1>
+</div>
+""", unsafe_allow_html=True)
+
+# -------------------------
+# Qui inserisci tutto il resto del tuo codice originale:
+# - Setup nuovo torneo / caricamento torneo
+# - Step creazione torneo
+# - Visualizzazione turni e input risultati
+# - Generazione turno successivo
+# - Export CSV/PDF
+# - Banner vincitore
+# -------------------------
+
+# Puoi incollare direttamente il resto del tuo script già funzionante, così tutto rimane integrato
 
 # -------------------------
 # Se torneo non è iniziato e non è stato ancora selezionato un setup
