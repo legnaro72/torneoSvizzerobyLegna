@@ -4,6 +4,9 @@ from datetime import datetime
 import io
 from fpdf import FPDF
 from pymongo import MongoClient
+# Aggiungi questa linea
+from pymongo.server_api import ServerApi
+
 
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
