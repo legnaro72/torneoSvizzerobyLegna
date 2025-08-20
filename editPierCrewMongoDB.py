@@ -74,7 +74,7 @@ def save_player(giocatore, squadra, potenziale):
         salva_dati_su_mongo(st.session_state.df_giocatori)
         
         st.session_state.edit_index = None
-        st.experimental_rerun()
+        st.rerun()
 
 def modify_player(idx):
     st.session_state.edit_index = idx
@@ -86,7 +86,7 @@ def delete_player(idx, selected_player):
     # CHIAMATA AL DATABASE PER SALVARE
     salva_dati_su_mongo(st.session_state.df_giocatori)
     
-    st.experimental_rerun()
+    st.rerun()
 
 # Logica di visualizzazione basata sullo stato
 if st.session_state.edit_index is None:
@@ -142,4 +142,4 @@ else:
     with col_cancel:
         if st.button("❌ Annulla"):
             st.session_state.edit_index = None
-            st.experimental_rerun()
+            st.rerun()
