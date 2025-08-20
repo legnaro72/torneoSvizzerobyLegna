@@ -1,38 +1,126 @@
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import requests
 import io
+from fpdf import FPDF   # <--- aggiunto import per PDF
+
 
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
 # -------------------------
 # Funzioni di utilità
 # -------------------------
+
+# -------------------------
+# Funzione export PDF
+# -------------------------
+def esporta_pdf(df_torneo, nome_torneo):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+
+    # Titolo torneo
+    titolo = nome_torneo.encode("latin-1", "ignore").decode("latin-1")
+    pdf.cell(0, 10, titolo, ln=True, align="C")
+
+    pdf.set_font("Arial", "", 11)
+    turno_corrente = None
+    for _, r in df_torneo.sort_values(by="Turno").iterrows():
+        if turno_corrente != r["Turno"]:
+            turno_corrente = r["Turno"]
+            pdf.ln(5)
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 8, f"Turno {turno_corrente}", ln=True)
+            pdf.set_font("Arial", "", 11)
+
+        casa = str(r["Casa"])
+        osp = str(r["Ospite"])
+        gc = str(r["GolCasa"])
+        go = str(r["GolOspite"])
+        match_text = f"{casa} {gc} - {go} {osp}"
+        match_text = match_text.encode("latin-1", "ignore").decode("latin-1")
+
+        if bool(r["Validata"]):
+            pdf.set_text_color(0, 0, 0)   # nero
+        else:
+            pdf.set_text_color(255, 0, 0) # rosso
+
+        pdf.cell(0, 8, match_text, ln=True)
+
+    # Classifica finale
+    pdf.ln(10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Classifica attuale", ln=True)
+
+    classifica = aggiorna_classifica(df_torneo)
+    if not classifica.empty:
+        pdf.set_font("Arial", "", 11)
+        for _, row in classifica.iterrows():
+            line = f"{row['Squadra']} - Punti:{row['Punti']} GF:{row['GF']} GS:{row['GS']} DR:{row['DR']}"
+            line = line.encode("latin-1", "ignore").decode("latin-1")
+            pdf.cell(0, 8, line, ln=True)
+
+    return pdf.output(dest="S").encode("latin-1")
+    
 def aggiorna_classifica(df):
     stats = {}
     for _, r in df.iterrows():
         if not bool(r.get('Validata', False)):
             continue
-        for squadra, gol, gol_avv in [(r['Casa'], int(r['GolCasa']), int(r['GolOspite'])),
-                                     (r['Ospite'], int(r['GolOspite']), int(r['GolCasa']))]:
+
+        casa, osp = r['Casa'], r['Ospite']
+        gc, go = int(r['GolCasa']), int(r['GolOspite'])
+
+        # inizializza squadre
+        for squadra in [casa, osp]:
             if squadra not in stats:
-                stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0}
-            stats[squadra]['GF'] += gol
-            stats[squadra]['GS'] += gol_avv
-        # punti (2 vittoria / 1 pareggio)
-        if int(r['GolCasa']) > int(r['GolOspite']):
-            stats[r['Casa']]['Punti'] += 2
-        elif int(r['GolCasa']) < int(r['GolOspite']):
-            stats[r['Ospite']]['Punti'] += 2
+                stats[squadra] = {
+                    'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0,
+                    'G': 0, 'V': 0, 'N': 0, 'P': 0
+                }
+
+        # aggiorna giocate
+        stats[casa]['G'] += 1
+        stats[osp]['G'] += 1
+        stats[casa]['GF'] += gc
+        stats[casa]['GS'] += go
+        stats[osp]['GF'] += go
+        stats[osp]['GS'] += gc
+
+        # esiti
+        if gc > go:
+            stats[casa]['Punti'] += 2
+            stats[casa]['V'] += 1
+            stats[osp]['P'] += 1
+        elif gc < go:
+            stats[osp]['Punti'] += 2
+            stats[osp]['V'] += 1
+            stats[casa]['P'] += 1
         else:
-            stats[r['Casa']]['Punti'] += 1
-            stats[r['Ospite']]['Punti'] += 1
+            stats[casa]['Punti'] += 1
+            stats[osp]['Punti'] += 1
+            stats[casa]['N'] += 1
+            stats[osp]['N'] += 1
 
     if not stats:
-        return pd.DataFrame(columns=['Squadra', 'Punti', 'GF', 'GS', 'DR'])
-    df_class = pd.DataFrame([{'Squadra': s, 'Punti': v['Punti'], 'GF': v['GF'], 'GS': v['GS'],
-                              'DR': v['GF'] - v['GS']} for s, v in stats.items()])
+        return pd.DataFrame(columns=['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR'])
+
+    df_class = pd.DataFrame([
+        {'Squadra': s,
+         'Punti': v['Punti'],
+         'G': v['G'],
+         'V': v['V'],
+         'N': v['N'],
+         'P': v['P'],
+         'GF': v['GF'],
+         'GS': v['GS'],
+         'DR': v['GF'] - v['GS']}
+        for s, v in stats.items()
+    ])
+
     df_class = df_class.sort_values(by=['Punti', 'DR', 'GF'], ascending=False).reset_index(drop=True)
     return df_class
 
@@ -305,15 +393,39 @@ if st.session_state.setup_mode == "nuovo":
 # -------------------------
 # Vista torneo attivo (solo dopo generazione o caricamento)
 # -------------------------
+# Vista torneo attivo (solo dopo generazione o caricamento)
+# -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    st.markdown("## 📅 Partite - Turno in corso")
-    # Mostra partite del turno attivo per default
-    turno_corrente = st.session_state.turno_attivo
-    st.markdown(f"### 🔷 Turno attivo: {turno_corrente}")
+
+    # scelta modalità vista turno
+    modo_vista = st.radio(
+        "Seleziona modalità di visualizzazione turni:",
+        options=["Menu a tendina", "Bottoni"],
+        index=0
+    )
+
+    turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
+
+    if modo_vista == "Menu a tendina":
+        turno_corrente = st.selectbox(
+            "🔹 Seleziona turno", 
+            turni_disponibili, 
+            index=len(turni_disponibili)-1
+        )
+    else:  # modalità bottoni
+        st.markdown("🔹 Seleziona turno:")
+        col_btns = st.columns(len(turni_disponibili))
+        turno_corrente = turni_disponibili[-1]  # default ultimo turno
+        for i, T in enumerate(turni_disponibili):
+            if col_btns[i].button(f"Turno {T}"):
+                turno_corrente = T
+
+    st.markdown(f"### 🔷 Turno selezionato: {turno_corrente}")
 
     df_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == turno_corrente].reset_index()
+
     if df_turno.empty:
-        st.info("Nessuna partita generata per il turno attivo. Premi 'Genera turno successivo' se tutte le partite validate.")
+        st.info("Nessuna partita generata per questo turno. Premi 'Genera turno successivo' se tutte le partite validate.")
     else:
         for _, row in df_turno.iterrows():
             idx = int(row['index'])
@@ -323,6 +435,7 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             key_gc = f"gc_{T}_{casa}_{osp}"
             key_go = f"go_{T}_{casa}_{osp}"
             key_val = f"val_{T}_{casa}_{osp}"
+
             # inizializza se mancanti
             st.session_state.risultati_temp.setdefault(key_gc, int(row.get('GolCasa', 0)))
             st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
@@ -330,21 +443,36 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
 
             c1, c2, c3, c4 = st.columns([3,1,1,0.8])
             with c1:
-                st.markdown(f"**{casa}** vs  **{osp}**")
+                st.markdown(f"**{casa}** vs  **{osp}**")
+
+            # chiavi uniche per widget
+            key_gc_input = f"gc_input_{T}_{casa}_{osp}"
+            key_go_input = f"go_input_{T}_{casa}_{osp}"
+            key_val_input = f"val_input_{T}_{casa}_{osp}"
+
+            if key_gc not in st.session_state:
+                st.session_state[key_gc] = int(row.get('GolCasa', 0))
+            if key_go not in st.session_state:
+                st.session_state[key_go] = int(row.get('GolOspite', 0))
+            if key_val not in st.session_state:
+                st.session_state[key_val] = bool(row.get('Validata', False))
+
             with c2:
-                gol_casa = st.number_input("", min_value=0, max_value=20, value=st.session_state.risultati_temp[key_gc], key=key_gc)
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input)
+                st.session_state[key_gc] = st.session_state[key_gc_input]
+
             with c3:
-                gol_osp = st.number_input("", min_value=0, max_value=20, value=st.session_state.risultati_temp[key_go], key=key_go)
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input)
+                st.session_state[key_go] = st.session_state[key_go_input]
+
             with c4:
-                validata = st.checkbox("Validata", value=st.session_state.risultati_temp[key_val], key=key_val)
-            # persisti in risultati_temp e nel df_torneo
-            st.session_state.risultati_temp[key_gc] = int(gol_casa)
-            st.session_state.risultati_temp[key_go] = int(gol_osp)
-            st.session_state.risultati_temp[key_val] = bool(validata)
-            # aggiorna df_torneo (modifica in session_state.df_torneo)
-            st.session_state.df_torneo.at[idx, 'GolCasa'] = int(gol_casa)
-            st.session_state.df_torneo.at[idx, 'GolOspite'] = int(gol_osp)
-            st.session_state.df_torneo.at[idx, 'Validata'] = bool(validata)
+                st.checkbox("Validata", key=key_val_input)
+                st.session_state[key_val] = st.session_state[key_val_input]
+
+            # aggiorna df_torneo
+            st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[key_gc]
+            st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[key_go]
+            st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[key_val]
 
     st.markdown("---")
     # Bottone per generare turno successivo
@@ -395,10 +523,52 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
                 df_visual[c] = ""
         st.dataframe(df_visual[cols_to_show], use_container_width=True)
 
-    st.markdown("### 💾 Esporta torneo")
+    # -------------------------
+    # Sezione esportazione (ora in sidebar)
+    # -------------------------
+    st.sidebar.markdown("### 💾 Esporta torneo")
+
+    # CSV
     csv_data = st.session_state.df_torneo.to_csv(index=False).encode('utf-8')
-    # Prepara il nome del file usando il nome del torneo
-    file_name = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    st.download_button(label="⬇️ Scarica CSV torneo", data=csv_data,
-                       file_name=file_name,
-                       mime="text/csv")
+    file_name_csv = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    st.sidebar.download_button(label="⬇️ Scarica CSV torneo", data=csv_data,
+                               file_name=file_name_csv,
+                               mime="text/csv")
+
+    # PDF
+    if st.sidebar.button("⬇️ Esporta torneo in PDF"):
+        pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+        file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        st.sidebar.download_button(
+            label="📄 Download PDF torneo",
+            data=pdf_bytes,
+            file_name=file_name_pdf,
+            mime="application/pdf"
+        )
+# -------------------------
+# Banner vincitore
+# -------------------------
+if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
+    # controlla se tutte le partite sono validate
+    tutte_validate = st.session_state.df_torneo['Validata'].all()
+
+    if tutte_validate:
+        df_class = aggiorna_classifica(st.session_state.df_torneo)
+        if not df_class.empty:
+            vincitore = df_class.iloc[0]['Squadra']
+
+            st.markdown(
+                f"""
+                <div style='background:linear-gradient(90deg, gold, orange); 
+                            padding:20px; 
+                            border-radius:12px; 
+                            text-align:center; 
+                            color:black; 
+                            font-size:28px; 
+                            font-weight:bold;
+                            margin-top:20px;'>
+                    🏆 Vincitore del torneo: {vincitore} 🏆
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
