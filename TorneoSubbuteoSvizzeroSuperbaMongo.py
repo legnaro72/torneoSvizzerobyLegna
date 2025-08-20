@@ -1,16 +1,30 @@
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import requests
 import io
 from fpdf import FPDF
+from pymongo import MongoClient
 
 st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
 
 # -------------------------
+# Connessione a MongoDB Atlas
+# -------------------------
+
+try:
+    MONGO_URI = st.secrets["MONGO_URI"]
+    client = MongoClient(MONGO_URI)
+    db = client.get_database("subbuteo_tournaments")
+    players_collection = db.get_collection("superba_players")
+    st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
+except Exception as e:
+    st.error(f"❌ Errore di connessione a MongoDB: {e}. Assicurati di aver configurato la tua MONGO_URI.")
+    st.stop()
+
+# -------------------------
 # Funzioni di utilità
 # -------------------------
+
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
@@ -37,9 +51,9 @@ def esporta_pdf(df_torneo, nome_torneo):
         match_text = match_text.encode("latin-1", "ignore").decode("latin-1")
 
         if bool(r["Validata"]):
-            pdf.set_text_color(0, 128, 0)   # verde per partite validate
+            pdf.set_text_color(0, 128, 0)
         else:
-            pdf.set_text_color(255, 0, 0)   # rosso per partite da giocare
+            pdf.set_text_color(255, 0, 0)
 
         pdf.cell(0, 8, match_text, ln=True)
 
@@ -123,16 +137,6 @@ def genera_accoppiamenti(classifica, precedenti):
     df = pd.DataFrame([{"Casa": c, "Ospite": o, "GolCasa": 0, "GolOspite": 0, "Validata": False} for c, o in accoppiamenti])
     return df
 
-def carica_csv_robusto_da_url(url):
-    try:
-        r = requests.get(url, timeout=8)
-        r.raise_for_status()
-        text = r.content.decode('latin1')
-        return pd.read_csv(io.StringIO(text))
-    except Exception as e:
-        st.warning(f"Errore caricamento CSV da URL: {e}")
-        return pd.DataFrame()
-
 def carica_csv_robusto_da_file(file_buffer):
     try:
         content = file_buffer.read()
@@ -140,6 +144,16 @@ def carica_csv_robusto_da_file(file_buffer):
         return pd.read_csv(io.StringIO(text))
     except Exception as e:
         st.warning(f"Errore caricamento CSV da file: {e}")
+        return pd.DataFrame()
+
+def carica_giocatori_da_db():
+    try:
+        df = pd.DataFrame(list(players_collection.find()))
+        if '_id' in df.columns:
+            df = df.drop(columns=['_id'])
+        return df
+    except Exception as e:
+        st.warning(f"Errore caricamento giocatori da MongoDB: {e}")
         return pd.DataFrame()
 
 def init_results_temp_from_df(df):
@@ -163,7 +177,7 @@ for key, default in {
     "turno_attivo": 0,
     "risultati_temp": {},
     "nuovo_torneo_step": 1,
-    "club_scelto": "Superba", # Imposta il club di default
+    "club_scelto": "Superba",
     "giocatori_scelti": [],
     "squadre_data": [],
     "torneo_iniziato": False,
@@ -172,14 +186,6 @@ for key, default in {
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
-
-# -------------------------
-# Dati club
-# -------------------------
-url_club = {
-    "Superba": "https://raw.githubusercontent.com/legnaro72/torneoSvizzerobyLegna/refs/heads/main/giocatoriSuperba.csv",
-    "PierCrew": "https://raw.githubusercontent.com/legnaro72/torneoSvizzerobyLegna/refs/heads/main/giocatoriPierCrew.csv",
-}
 
 # -------------------------
 # Header grafico
@@ -199,9 +205,9 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
     with c1:
         st.markdown(
             """<div style='background:#f5f8ff; border-radius:8px; padding:18px; text-align:center'>
-               <h2>📂 Carica torneo esistente</h2>
-               <p style='margin:0.2rem 0 1rem 0'>Riprendi un torneo salvato (CSV)</p>
-               </div>""",
+                <h2>📂 Carica torneo esistente</h2>
+                <p style='margin:0.2rem 0 1rem 0'>Riprendi un torneo salvato (CSV)</p>
+                </div>""",
             unsafe_allow_html=True,
         )
         if st.button("Carica torneo (CSV)", key="btn_carica"):
@@ -210,16 +216,16 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
     with c2:
         st.markdown(
             """<div style='background:#fff8e6; border-radius:8px; padding:18px; text-align:center'>
-               <h2>✨ Crea nuovo torneo</h2>
-               <p style='margin:0.2rem 0 1rem 0'>Genera primo turno scegliendo giocatori del Club Superba</p>
-               </div>""",
+                <h2>✨ Crea nuovo torneo</h2>
+                <p style='margin:0.2rem 0 1rem 0'>Genera primo turno scegliendo giocatori del Club Superba</p>
+                </div>""",
             unsafe_allow_html=True,
         )
         if st.button("Nuovo torneo", key="btn_nuovo"):
             st.session_state.setup_mode = "nuovo"
             st.session_state.nuovo_torneo_step = 0
             st.session_state.giocatori_scelti = []
-            st.session_state.club_scelto = "Superba" # Imposta il club
+            st.session_state.club_scelto = "Superba"
             st.rerun()
 
     st.markdown("---")
@@ -268,11 +274,10 @@ if st.session_state.setup_mode == "nuovo":
 
     elif st.session_state.nuovo_torneo_step == 1:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
-        
-        # Rimozione della scelta del club, ora è cablato su Superba
         st.markdown(f"### Club selezionato: **{st.session_state.club_scelto}**")
 
-        df_gioc = carica_csv_robusto_da_url(url_club[st.session_state.club_scelto])
+        # Legge i giocatori da MongoDB
+        df_gioc = carica_giocatori_da_db()
         st.markdown("**Numero partecipanti** (min 2)")
         num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
         st.markdown("### 👥 Seleziona i giocatori del club")
@@ -284,7 +289,7 @@ if st.session_state.setup_mode == "nuovo":
         giocatori_selezionati_temp = []
         if giocatori_club:
             for g in giocatori_club:
-                checked = seleziona_tutti
+                checked = seleziona_tutti or (g in st.session_state.giocatori_scelti)
                 if st.checkbox(g, value=checked, key=f"chk_{g}"):
                     giocatori_selezionati_temp.append(g)
 
@@ -313,11 +318,18 @@ if st.session_state.setup_mode == "nuovo":
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown("### 🏷️ Definisci Squadre e Potenziali")
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
-        df_gioc = carica_csv_robusto_da_url(url_club[st.session_state.club_scelto]) if st.session_state.club_scelto else pd.DataFrame()
+        
+        # Legge i giocatori da MongoDB
+        df_gioc = carica_giocatori_da_db()
         squadre_data = []
         for i, gioc in enumerate(st.session_state.giocatori_scelti):
-            if not df_gioc.empty and 'Giocatore' in df_gioc.columns and gioc in df_gioc['Giocatore'].values:
-                riga = df_gioc[df_gioc['Giocatore'] == gioc].iloc[0]
+            riga = None
+            if not df_gioc.empty and 'Giocatore' in df_gioc.columns:
+                riga_match = df_gioc[df_gioc['Giocatore'] == gioc]
+                if not riga_match.empty:
+                    riga = riga_match.iloc[0]
+
+            if riga is not None:
                 squadra_default = riga['Squadra'] if 'Squadra' in riga and pd.notna(riga['Squadra']) else f"Squadra{i+1}"
                 try:
                     pot_def = int(riga['Potenziale']) if 'Potenziale' in riga and pd.notna(riga['Potenziale']) else 4
@@ -327,9 +339,13 @@ if st.session_state.setup_mode == "nuovo":
                 squadra_default = f"Squadra{i+1}"
                 pot_def = 4
 
-            nome_gioc = st.text_input(f"Nome giocatore {i+1}", value=gioc, key=f"g_{i}")
-            squadra = st.text_input(f"Squadra {i+1}", value=squadra_default, key=f"s_{i}")
-            pot = st.slider(f"Potenziale {i+1}", 1, 10, value=pot_def, key=f"p_{i}")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                nome_gioc = st.text_input(f"Nome giocatore {i+1}", value=gioc, key=f"g_{i}")
+            with col2:
+                squadra = st.text_input(f"Squadra {i+1}", value=squadra_default, key=f"s_{i}")
+            with col3:
+                pot = st.slider(f"Potenziale {i+1}", 1, 10, value=pot_def, key=f"p_{i}")
             squadre_data.append({"Giocatore": nome_gioc, "Squadra": squadra, "Potenziale": pot})
 
         st.markdown("---")
@@ -341,12 +357,13 @@ if st.session_state.setup_mode == "nuovo":
 
             classifica_iniziale = pd.DataFrame({
                 'Squadra': df_squadre['SquadraGiocatore'],
-                'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0
+                'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0, 'G': 0, 'V': 0, 'N': 0, 'P': 0
             })
             nuove_partite = genera_accoppiamenti(classifica_iniziale, set())
             st.session_state.turno_attivo = 1
             nuove_partite["Turno"] = st.session_state.turno_attivo
-            st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, nuove_partite], ignore_index=True)
+            
+            st.session_state.df_torneo = nuove_partite
             init_results_temp_from_df(nuove_partite)
             st.session_state.torneo_iniziato = True
             st.session_state.setup_mode = None
@@ -364,17 +381,17 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
     )
 
     turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
+    turno_corrente = turni_disponibili[-1]
 
     if modo_vista == "Menu a tendina":
         turno_corrente = st.selectbox(
             "🔹 Seleziona turno", 
             turni_disponibili, 
-            index=len(turni_disponibili)-1
+            index=len(turni_disponibili) - 1
         )
     else:
         st.markdown("🔹 Seleziona turno:")
         col_btns = st.columns(len(turni_disponibili))
-        turno_corrente = turni_disponibili[-1]
         for i, T in enumerate(turni_disponibili):
             if col_btns[i].button(f"Turno {T}"):
                 turno_corrente = T
@@ -399,7 +416,7 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
             st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
-            c1, c2, c3, c4 = st.columns([3,1,1,0.8])
+            c1, c2, c3, c4 = st.columns([3, 1, 1, 0.8])
             with c1:
                 st.markdown(f"**{casa}** vs **{osp}**")
 
@@ -407,52 +424,34 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             key_go_input = f"go_input_{T}_{casa}_{osp}"
             key_val_input = f"val_input_{T}_{casa}_{osp}"
 
-            if key_gc not in st.session_state:
-                st.session_state[key_gc] = int(row.get('GolCasa', 0))
-            if key_go not in st.session_state:
-                st.session_state[key_go] = int(row.get('GolOspite', 0))
-            if key_val not in st.session_state:
-                st.session_state[key_val] = bool(row.get('Validata', False))
-
             with c2:
-                st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input)
-                st.session_state[key_gc] = st.session_state[key_gc_input]
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input, value=st.session_state[key_gc], on_change=lambda k: st.session_state.update({k: st.session_state[k+'_input']}), args=(key_gc,))
             with c3:
-                st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input)
-                st.session_state[key_go] = st.session_state[key_go_input]
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input, value=st.session_state[key_go], on_change=lambda k: st.session_state.update({k: st.session_state[k+'_input']}), args=(key_go,))
             with c4:
-                st.checkbox("Validata", key=key_val_input)
-                st.session_state[key_val] = st.session_state[key_val_input]
+                st.checkbox("Validata", key=key_val_input, value=st.session_state[key_val], on_change=lambda k: st.session_state.update({k: st.session_state[k+'_input']}), args=(key_val,))
 
-            st.session_state.df_torneo.at[idx, 'GolCasa'] = st.session_state[key_gc]
-            st.session_state.df_torneo.at[idx, 'GolOspite'] = st.session_state[key_go]
-            st.session_state.df_torneo.at[idx, 'Validata'] = st.session_state[key_val]
+            st.session_state.df_torneo.loc[idx, 'GolCasa'] = st.session_state[key_gc]
+            st.session_state.df_torneo.loc[idx, 'GolOspite'] = st.session_state[key_go]
+            st.session_state.df_torneo.loc[idx, 'Validata'] = st.session_state[key_val]
 
     st.markdown("---")
-    c_left, c_right = st.columns([1,2])
+    c_left, c_right = st.columns([1, 2])
     with c_left:
         if st.button("⚡ Genera turno successivo"):
             partite_validate = st.session_state.df_torneo[st.session_state.df_torneo['Validata'] == True]
             precedenti = set(zip(partite_validate['Casa'], partite_validate['Ospite']))
             classifica_attuale = aggiorna_classifica(st.session_state.df_torneo)
             if classifica_attuale.empty:
-                if not st.session_state.df_squadre.empty:
-                    classifica_attuale = pd.DataFrame({'Squadra': st.session_state.df_squadre['SquadraGiocatore']})
-                else:
-                    st.warning("Classifica vuota: assicurati di avere squadre o partite validate.")
-                    classifica_attuale = pd.DataFrame({'Squadra': []})
+                st.warning("Classifica vuota: assicurati di avere squadre o partite validate.")
+                classifica_attuale = pd.DataFrame({'Squadra': []})
+            
             nuove_partite = genera_accoppiamenti(classifica_attuale, precedenti)
             if nuove_partite.empty:
                 st.warning("⚠️ Nessuna nuova partita possibile (controlla partite validate / già giocate).")
             else:
                 st.session_state.turno_attivo += 1
                 nuove_partite["Turno"] = st.session_state.turno_attivo
-                for col in ['GolCasa','GolOspite','Validata']:
-                    if col not in nuove_partite.columns:
-                        if col in ['GolCasa','GolOspite']:
-                            nuove_partite[col] = 0
-                        else:
-                            nuove_partite[col] = False
                 st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, nuove_partite], ignore_index=True)
                 init_results_temp_from_df(nuove_partite)
                 st.success(f"🎉 Turno {st.session_state.turno_attivo} generato!")
@@ -479,8 +478,8 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
     csv_data = st.session_state.df_torneo.to_csv(index=False).encode('utf-8')
     file_name_csv = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     st.sidebar.download_button(label="⬇️ Scarica CSV torneo", data=csv_data,
-                               file_name=file_name_csv,
-                               mime="text/csv")
+                                 file_name=file_name_csv,
+                                 mime="text/csv")
     
     if st.sidebar.button("⬇️ Esporta torneo in PDF"):
         pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
@@ -506,13 +505,13 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             st.markdown(
                 f"""
                 <div style='background:linear-gradient(90deg, gold, orange); 
-                            padding:20px; 
-                            border-radius:12px; 
-                            text-align:center; 
-                            color:black; 
-                            font-size:28px; 
-                            font-weight:bold;
-                            margin-top:20px;'>
+                             padding:20px; 
+                             border-radius:12px; 
+                             text-align:center; 
+                             color:black; 
+                             font-size:28px; 
+                             font-weight:bold;
+                             margin-top:20px;'>
                     🏆 Vincitore del torneo: {vincitore} 🏆
                 </div>
                 """,
