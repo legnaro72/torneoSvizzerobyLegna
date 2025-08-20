@@ -1,13 +1,8 @@
 import streamlit as st
 import pandas as pd
-import math
 import os
-import io
-from datetime import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
+from fpdf import FPDF
+import base64
 
 # =========================
 # Config & stile di pagina
@@ -15,181 +10,130 @@ from reportlab.lib import colors
 st.set_page_config(page_title="🇨🇭 Torneo Svizzero x Club", layout="wide")
 
 # =========================
-# Funzioni utili
+# Funzioni di supporto
 # =========================
-def aggiorna_classifica(df):
-    """Crea la classifica aggiornata da df partite validate"""
-    squadre = pd.unique(df[["Casa", "Ospite"]].values.ravel())
-    classifica = {sq: {"Punti":0,"GF":0,"GS":0,"G":0} for sq in squadre}
+def calcola_classifica(partite):
+    classifica = {}
+    for _, row in partite.iterrows():
+        if row["Validata"]:
+            casa, trasf = row["Squadra Casa"], row["Squadra Trasferta"]
+            gol_casa, gol_trasf = row["Gol Casa"], row["Gol Trasferta"]
 
-    for _, r in df.iterrows():
-        if not r["Validata"]:
-            continue
-        casa, ospite = r["Casa"], r["Ospite"]
-        gc, go = int(r["GolCasa"]), int(r["GolOspite"])
-        classifica[casa]["GF"] += gc
-        classifica[casa]["GS"] += go
-        classifica[ospite]["GF"] += go
-        classifica[ospite]["GS"] += gc
-        classifica[casa]["G"] += 1
-        classifica[ospite]["G"] += 1
-        if gc > go:
-            classifica[casa]["Punti"] += 3
-        elif gc < go:
-            classifica[ospite]["Punti"] += 3
-        else:
-            classifica[casa]["Punti"] += 1
-            classifica[ospite]["Punti"] += 1
+            for squadra in [casa, trasf]:
+                if squadra not in classifica:
+                    classifica[squadra] = {"Punti": 0, "GF": 0, "GS": 0, "Diff": 0}
 
-    df_class = pd.DataFrame([
-        {"Squadra": sq, "Punti": d["Punti"], "GF": d["GF"], "GS": d["GS"], "DR": d["GF"]-d["GS"], "G": d["G"]}
-        for sq,d in classifica.items()
-    ])
-    df_class = df_class.sort_values(by=["Punti","DR","GF"], ascending=[False,False,False]).reset_index(drop=True)
-    return df_class
+            classifica[casa]["GF"] += gol_casa
+            classifica[casa]["GS"] += gol_trasf
+            classifica[casa]["Diff"] = classifica[casa]["GF"] - classifica[casa]["GS"]
 
-def genera_pdf(df_partite, df_classifica, torneo_completo=True):
-    """Genera PDF con calendario e classifica"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    story = []
-    styles = getSampleStyleSheet()
+            classifica[trasf]["GF"] += gol_trasf
+            classifica[trasf]["GS"] += gol_casa
+            classifica[trasf]["Diff"] = classifica[trasf]["GF"] - classifica[trasf]["GS"]
 
-    titolo = Paragraph(f"<b>{st.session_state.nome_torneo}</b>", styles['Title'])
-    story.append(titolo)
-    story.append(Spacer(1, 12))
-
-    # Partite
-    story.append(Paragraph("<b>Calendario Partite</b>", styles['Heading2']))
-    data = [["Turno", "Casa", "Gol", "Ospite", "Gol", "Stato"]]
-    for _, r in df_partite.iterrows():
-        stato = "✅ Giocata" if r["Validata"] else "⏳ Da giocare"
-        colore = colors.black if r["Validata"] else colors.red
-        row = [
-            str(r["Turno"]),
-            Paragraph(f"<font color='{colore.rgb()}'>"+str(r["Casa"])+"</font>", styles['Normal']),
-            Paragraph(f"<font color='{colore.rgb()}'>"+str(r["GolCasa"])+"</font>", styles['Normal']),
-            Paragraph(f"<font color='{colore.rgb()}'>"+str(r["Ospite"])+"</font>", styles['Normal']),
-            Paragraph(f"<font color='{colore.rgb()}'>"+str(r["GolOspite"])+"</font>", styles['Normal']),
-            Paragraph(f"<font color='{colore.rgb()}'>"+stato+"</font>", styles['Normal'])
-        ]
-        data.append(row)
-
-    t = Table(data, repeatRows=1)
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('ALIGN', (2,1), (2,-1), 'CENTER'),
-        ('ALIGN', (4,1), (4,-1), 'CENTER'),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 20))
-
-    # Classifica
-    if not df_classifica.empty:
-        if torneo_completo:
-            story.append(Paragraph("<b>Classifica Finale</b>", styles['Heading2']))
-            colore = colors.black
-        else:
-            story.append(Paragraph("<b>Classifica Parziale</b>", styles['Heading2']))
-            colore = colors.red
-
-        data_class = [list(df_classifica.columns)] + df_classifica.astype(str).values.tolist()
-        data_class_colored = []
-        for i, row in enumerate(data_class):
-            if i == 0:  
-                data_class_colored.append(row)
+            if gol_casa > gol_trasf:
+                classifica[casa]["Punti"] += 3
+            elif gol_casa < gol_trasf:
+                classifica[trasf]["Punti"] += 3
             else:
-                data_class_colored.append([Paragraph(f"<font color='{colore.rgb()}'>"+c+"</font>", styles['Normal']) for c in row])
+                classifica[casa]["Punti"] += 1
+                classifica[trasf]["Punti"] += 1
 
-        t2 = Table(data_class_colored, repeatRows=1)
-        t2.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ]))
-        story.append(t2)
+    df = pd.DataFrame(classifica).T.reset_index()
+    df = df.rename(columns={"index": "Squadra"})
+    df = df.sort_values(by=["Punti", "Diff", "GF"], ascending=[False, False, False]).reset_index(drop=True)
+    return df
 
-        if torneo_completo:
-            vincitore = df_classifica.iloc[0]["Squadra"]
-            story.append(Spacer(1, 20))
-            story.append(Paragraph(f"🏆 Vincitore del torneo: <b>{vincitore}</b>", styles['Title']))
+def torneo_concluso(partite):
+    return partite["Validata"].all()
 
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
+def genera_pdf(partite, classifica, concluso):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, "Calendario & Classifica Torneo Svizzero", ln=True, align="C")
 
-# =========================
-# Stato app
-# =========================
-if "torneo_iniziato" not in st.session_state:
-    st.session_state.torneo_iniziato = False
-if "df_torneo" not in st.session_state:
-    st.session_state.df_torneo = pd.DataFrame()
-if "nome_torneo" not in st.session_state:
-    st.session_state.nome_torneo = "Torneo Subbuteo"
+    # Sezione partite
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Partite:", ln=True)
 
-# =========================
-# Creazione torneo demo
-# =========================
-if not st.session_state.torneo_iniziato:
-    st.title("🇨🇭 Torneo Svizzero x Club")
-    st.info("Demo avviata con un torneo fittizio (4 squadre, girone unico andata).")
-    squadre = ["Milan","Inter","Juve","Roma"]
-    partite = []
-    turno = 1
-    for i in range(len(squadre)):
-        for j in range(i+1,len(squadre)):
-            partite.append({"Turno": turno,"Casa": squadre[i],"Ospite": squadre[j],
-                            "GolCasa":0,"GolOspite":0,"Validata": False})
-            turno += 1
-    st.session_state.df_torneo = pd.DataFrame(partite)
-    st.session_state.torneo_iniziato = True
+    for _, row in partite.iterrows():
+        if row["Validata"]:
+            pdf.set_text_color(0, 0, 0)  # nero
+        else:
+            pdf.set_text_color(255, 0, 0)  # rosso
 
-# =========================
-# Vista torneo
-# =========================
-st.header(st.session_state.nome_torneo)
+        testo = f"{row['Squadra Casa']} {row['Gol Casa']} - {row['Gol Trasferta']} {row['Squadra Trasferta']}"
+        pdf.set_font("Arial", "", 11)
+        pdf.cell(0, 8, testo, ln=True)
 
-df = st.session_state.df_torneo
-for i, row in df.iterrows():
-    col1,col2,col3,col4,col5 = st.columns([2,1,2,1,1])
-    with col1: st.write(row["Casa"])
-    with col2: g1 = st.number_input(" ", min_value=0, max_value=20, value=int(row["GolCasa"]), key=f"c_{i}")
-    with col3: st.write(row["Ospite"])
-    with col4: g2 = st.number_input("  ", min_value=0, max_value=20, value=int(row["GolOspite"]), key=f"o_{i}")
-    with col5: 
-        if st.checkbox("Valida", value=row["Validata"], key=f"v_{i}"):
-            df.at[i,"Validata"] = True
-        df.at[i,"GolCasa"] = g1
-        df.at[i,"GolOspite"] = g2
+    # Sezione classifica
+    if not classifica.empty:
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "Classifica:", ln=True)
 
-st.session_state.df_torneo = df
+        if concluso:
+            pdf.set_text_color(0, 0, 0)  # nero
+        else:
+            pdf.set_text_color(255, 0, 0)  # rosso
 
-# =========================
-# Classifica
-# =========================
-df_class = aggiorna_classifica(df)
-st.subheader("Classifica")
-st.dataframe(df_class, hide_index=True, use_container_width=True)
+        for _, row in classifica.iterrows():
+            testo = f"{row['Squadra']} - Punti: {row['Punti']} | Diff: {row['Diff']} | GF: {row['GF']} | GS: {row['GS']}"
+            pdf.set_font("Arial", "", 11)
+            pdf.cell(0, 8, testo, ln=True)
 
-# Vincitore se torneo finito
-if all(df["Validata"]) and not df_class.empty:
-    vincitore = df_class.iloc[0]["Squadra"]
-    st.success(f"🏆 Vincitore del torneo: {vincitore}")
+        # Vincitore se concluso
+        if concluso:
+            vincitore = classifica.iloc[0]["Squadra"]
+            pdf.ln(10)
+            pdf.set_font("Arial", "B", 14)
+            pdf.set_text_color(0, 128, 0)  # verde
+            pdf.cell(0, 12, f"🏆 Vincitore del torneo: {vincitore}", ln=True, align="C")
+
+    return pdf
+
+def scarica_pdf(pdf, filename="torneo.pdf"):
+    file_path = f"/tmp/{filename}"
+    pdf.output(file_path)
+    with open(file_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">📥 Scarica PDF</a>'
+    st.sidebar.markdown(href, unsafe_allow_html=True)
 
 # =========================
-# Export in sidebar
+# Demo partite
 # =========================
-with st.sidebar:
-    st.markdown("### 📂 Esporta Dati")
+if "partite" not in st.session_state:
+    st.session_state.partite = pd.DataFrame([
+        {"Squadra Casa": "Milan", "Gol Casa": 2, "Squadra Trasferta": "Inter", "Gol Trasferta": 1, "Validata": True},
+        {"Squadra Casa": "Juve", "Gol Casa": 0, "Squadra Trasferta": "Roma", "Gol Trasferta": 0, "Validata": False},
+    ])
 
-    # Export CSV
-    csv_data = st.session_state.df_torneo.to_csv(index=False).encode('utf-8')
-    file_name_csv = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    st.download_button("⬇️ Scarica CSV", data=csv_data, file_name=file_name_csv, mime="text/csv")
+partite = st.session_state.partite
+classifica = calcola_classifica(partite)
+concluso = torneo_concluso(partite)
 
-    # Export PDF
-    torneo_completo = all(st.session_state.df_torneo["Validata"])
-    pdf_buffer = genera_pdf(st.session_state.df_torneo, df_class, torneo_completo)
-    file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    st.download_button("📄 Esporta PDF", data=pdf_buffer, file_name=file_name_pdf, mime="application/pdf")
+# =========================
+# UI
+# =========================
+st.title("🇨🇭 Torneo Svizzero x Club")
+
+st.subheader("📋 Calendario")
+st.dataframe(partite)
+
+st.subheader("📊 Classifica")
+if concluso:
+    st.dataframe(classifica)
+    vincitore = classifica.iloc[0]["Squadra"]
+    st.success(f"🏆 Vincitore del torneo: **{vincitore}** 🎉")
+else:
+    st.error("Classifica provvisoria (torneo non concluso)")
+    st.dataframe(classifica)
+
+# =========================
+# PDF Export
+# =========================
+st.sidebar.title("📤 Esporta")
+pdf = genera_pdf(partite, classifica, concluso)
+scarica_pdf(pdf, "torneo.pdf")
