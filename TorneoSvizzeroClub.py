@@ -111,6 +111,8 @@ if "torneo_iniziato" not in st.session_state:
     st.session_state.torneo_iniziato = False
 if "setup_mode" not in st.session_state:
     st.session_state.setup_mode = None  # 'carica' | 'nuovo' | None
+if "nome_torneo" not in st.session_state:
+    st.session_state.nome_torneo = "TorneoSubbuteoSvizzero_"
 
 # -------------------------
 # Dati club (URL giocatori)
@@ -152,7 +154,7 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
         )
         if st.button("Nuovo torneo", key="btn_nuovo"):
             st.session_state.setup_mode = "nuovo"
-            st.session_state.nuovo_torneo_step = 1
+            st.session_state.nuovo_torneo_step = 0 # Ho aggiunto uno step 0 per il nome
             st.session_state.giocatori_scelti = []
             st.rerun() # Forza il ricaricamento
 
@@ -197,8 +199,18 @@ if st.session_state.setup_mode == "carica":
 # Se scelgo nuovo torneo
 if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
+
+    # Step 0: dare un nome al torneo
+    if st.session_state.nuovo_torneo_step == 0:
+        nome_torneo_input = st.text_input("Dai un nome al tuo torneo", value=st.session_state.nome_torneo)
+        st.session_state.nome_torneo = nome_torneo_input
+        if st.button("Prossimo passo", key="next_step_0"):
+            st.session_state.nuovo_torneo_step = 1
+            st.rerun()
+
     # Step 1: scelta club e giocatori
-    if st.session_state.nuovo_torneo_step == 1:
+    elif st.session_state.nuovo_torneo_step == 1:
+        st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         club = st.selectbox("Scegli il Club", list(url_club.keys()), index=0)
         st.session_state.club_scelto = club
         df_gioc = carica_csv_robusto_da_url(url_club[club])
@@ -245,7 +257,8 @@ if st.session_state.setup_mode == "nuovo":
     # Step 2: conferma squadre e potenziale
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown("### 🏷️ Definisci Squadre e Potenziali")
-        df_gioc = carica_csv_robusto_da_url(st.session_state.club_scelto) if st.session_state.club_scelto else pd.DataFrame()
+        st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
+        df_gioc = carica_csv_robusto_da_url(url_club[st.session_state.club_scelto]) if st.session_state.club_scelto else pd.DataFrame()
         squadre_data = []
         for i, gioc in enumerate(st.session_state.giocatori_scelti):
             # precompila nome e squadra dal CSV club se presente
@@ -382,7 +395,7 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
         st.dataframe(df_visual[cols_to_show], use_container_width=True)
 
     st.markdown("### 💾 Esporta torneo")
-    nome_base = st.text_input("Nome file (base)", value="torneo_subbuteo", key="nome_base")
+    nome_base = st.text_input("Nome file (base)", value=st.session_state.nome_torneo, key="nome_base")
     csv_data = st.session_state.df_torneo.to_csv(index=False).encode('utf-8')
     st.download_button(label="⬇️ Scarica CSV torneo", data=csv_data,
                        file_name=f"{nome_base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
