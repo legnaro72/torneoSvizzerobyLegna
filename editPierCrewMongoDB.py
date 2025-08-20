@@ -6,10 +6,10 @@ from pymongo.server_api import ServerApi
 # Passo 3.1: Connessione a MongoDB
 # La stringa di connessione è una variabile segreta in Streamlit Cloud
 # Per un test locale, puoi inserirla direttamente qui:
-MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
+#MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
 
-MONGO_URI = st.secrets["mongo_uri"] 
+mongo_uri = st.secrets["mongo_uri"] 
 
 # Crea una connessione al client
 try:
