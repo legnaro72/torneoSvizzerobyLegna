@@ -467,10 +467,10 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             st.session_state.risultati_temp[key_go] = st.session_state[key_go_input]
             st.session_state.risultati_temp[key_val] = st.session_state[key_val_input]
 
-# Aggiorna il DataFrame del torneo
-st.session_state.df_torneo.loc[idx, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
-st.session_state.df_torneo.loc[idx, 'GolOspite'] = st.session_state.risultati_temp[key_go]
-st.session_state.df_torneo.loc[idx, 'Validata'] = st.session_state.risultati_temp[key_val]
+            # Aggiorna il DataFrame del torneo
+            st.session_state.df_torneo.loc[idx, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
+            st.session_state.df_torneo.loc[idx, 'GolOspite'] = st.session_state.risultati_temp[key_go]
+            st.session_state.df_torneo.loc[idx, 'Validata'] = st.session_state.risultati_temp[key_val]
             
     st.markdown("---")
     c_left, c_right = st.columns([1, 2])
