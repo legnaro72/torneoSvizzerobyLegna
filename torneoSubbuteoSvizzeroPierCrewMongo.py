@@ -451,17 +451,27 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
             key_go_input = f"go_input_{T}_{casa}_{osp}"
             key_val_input = f"val_input_{T}_{casa}_{osp}"
 
+            
             with c2:
-                st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input, value=st.session_state[key_gc], on_change=lambda k: st.session_state.update({k: st.session_state[k+'_input']}), args=(key_gc,))
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_gc_input,
+                                value=st.session_state.risultati_temp[key_gc])
             with c3:
-                st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input, value=st.session_state[key_go], on_change=lambda k: st.session_state.update({k: st.session_state[k+'_input']}), args=(key_go,))
+                st.number_input("", min_value=0, max_value=20, step=1, key=key_go_input,
+                                value=st.session_state.risultati_temp[key_go])
             with c4:
-                st.checkbox("Validata", key=key_val_input, value=st.session_state[key_val], on_change=lambda k: st.session_state.update({k: st.session_state[k+'_input']}), args=(key_val,))
+                st.checkbox("Validata", key=key_val_input,
+                            value=st.session_state.risultati_temp[key_val])
+            
+            # Dopo che i widget sono stati creati, leggi i loro valori e aggiorna il dizionario
+            st.session_state.risultati_temp[key_gc] = st.session_state[key_gc_input]
+            st.session_state.risultati_temp[key_go] = st.session_state[key_go_input]
+            st.session_state.risultati_temp[key_val] = st.session_state[key_val_input]
 
-            st.session_state.df_torneo.loc[idx, 'GolCasa'] = st.session_state[key_gc]
-            st.session_state.df_torneo.loc[idx, 'GolOspite'] = st.session_state[key_go]
-            st.session_state.df_torneo.loc[idx, 'Validata'] = st.session_state[key_val]
-
+            # Aggiorna il DataFrame del torneo
+            st.session_state.df_torneo.loc[idx, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
+            st.session_state.df_torneo.loc[idx, 'GolOspite'] = st.session_state.risultati_temp[key_go]
+            st.session_state.df_torneo.loc[idx, 'Validata'] = st.session_state.risultati_temp[key_val]
+            
     st.markdown("---")
     c_left, c_right = st.columns([1, 2])
     with c_left:
