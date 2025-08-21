@@ -18,9 +18,11 @@ try:
     MONGO_URI = st.secrets["MONGO_URI"]
     server_api = ServerApi('1')
     client = MongoClient(MONGO_URI, server_api=server_api)
-    db = client.get_database("subbuteo_tournaments")
-    players_collection = db.get_collection("superba_players")
-    # Tenta una semplice operazione per testare la connessione
+    
+    # Ho corretto il nome del database e della collection
+    db = client.get_database("giocatori_subbuteo")
+    players_collection = db.get_collection("superba_players") 
+
     _ = players_collection.find_one()
     st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
 except Exception as e:
@@ -33,7 +35,6 @@ except Exception as e:
 def carica_giocatori_da_db():
     if 'players_collection' in globals() and players_collection is not None:
         try:
-            # Controllo aggiunto per verificare se la collection esiste e ha documenti
             count = players_collection.count_documents({})
             if count == 0:
                 st.warning("⚠️ La collection 'superba_players' è vuota o non esiste. Non è stato caricato alcun giocatore.")
@@ -46,7 +47,6 @@ def carica_giocatori_da_db():
             if '_id' in df.columns:
                 df = df.drop(columns=['_id'])
             
-            # Controllo per la colonna 'Giocatore'
             if 'Giocatore' not in df.columns:
                 st.error("❌ Errore: la colonna 'Giocatore' non è presente nel database dei giocatori.")
                 return pd.DataFrame()
