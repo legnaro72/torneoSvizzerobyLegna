@@ -26,12 +26,14 @@ db = client["giocatori_subbuteo"]
 collection = db["superba_players"]
 
 def carica_dati_da_mongo():
-    """Carica tutti i giocatori dalla collezione MongoDB."""
+    """Carica tutti i giocatori dalla collezione MongoDB e li ordina alfabeticamente."""
     data = list(collection.find())
     if data:
         df = pd.DataFrame(data)
         # Rimuovi la colonna _id che viene aggiunta automaticamente da Mongo
         df = df.drop(columns=["_id"], errors="ignore")
+        # Ordina i giocatori in base al nome
+        df = df.sort_values(by="Giocatore").reset_index(drop=True)
         return df[["Giocatore", "Squadra", "Potenziale"]]
     return pd.DataFrame(columns=["Giocatore", "Squadra", "Potenziale"])
 
@@ -69,6 +71,9 @@ def save_player(giocatore, squadra, potenziale):
             st.session_state.df_giocatori.at[idx, "Squadra"] = squadra.strip()
             st.session_state.df_giocatori.at[idx, "Potenziale"] = potenziale
             st.success(f"Giocatore '{giocatore}' aggiornato!")
+            
+        # Ordina il dataframe dopo ogni salvataggio
+        st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
         
         # CHIAMATA AL DATABASE PER SALVARE
         salva_dati_su_mongo(st.session_state.df_giocatori)
@@ -82,6 +87,9 @@ def modify_player(idx):
 def delete_player(idx, selected_player):
     st.session_state.df_giocatori = st.session_state.df_giocatori.drop(idx).reset_index(drop=True)
     st.success(f"Giocatore '{selected_player}' eliminato!")
+    
+    # Ordina il dataframe dopo ogni eliminazione
+    st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
     
     # CHIAMATA AL DATABASE PER SALVARE
     salva_dati_su_mongo(st.session_state.df_giocatori)
