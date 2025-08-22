@@ -15,7 +15,7 @@ st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="
 players_collection = None
 st.info("Tentativo di connessione a MongoDB...")
 try:
-    MONGO_URI = st.secrets["MONGO_URI"]
+    MONGO_URI=st.secrets["MONGO_URI"]
     server_api = ServerApi('1')
     client = MongoClient(MONGO_URI, server_api=server_api)
     
@@ -27,6 +27,9 @@ try:
     st.success("✅ Connessione a MongoDB Atlas riuscita per la lettura dei giocatori.")
 except Exception as e:
     st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare i giocatori dal database.")
+
+
+
 
 # -------------------------
 # Funzioni di utilità
