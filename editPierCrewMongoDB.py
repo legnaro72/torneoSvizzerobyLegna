@@ -8,6 +8,7 @@ from pymongo.server_api import ServerApi
 # Per un test locale, puoi inserirla direttamente qui:
 #MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
+#MONGO_URI=st.secrets["MONGO_URI"]
 MONGO_URI=st.secrets["MONGO_URI"]
 
 # Crea una connessione al client
