@@ -22,8 +22,8 @@ except Exception as e:
     st.stop() # Interrompe l'app se la connessione fallisce
 
 # Seleziona il database e la collezione
-db = client["giocatori_subbuteo"]
-collection = db["piercrew_players"]
+db=client["giocatori_subbuteo"]
+collection=db["piercrew_players"]
 
 def carica_dati_da_mongo():
     """Carica tutti i giocatori dalla collezione MongoDB e li ordina alfabeticamente."""
