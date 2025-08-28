@@ -15,7 +15,7 @@ st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="
 
 players_collection = None
 tournaments_collection = None
-st.toast("Tentativo di connessione a MongoDB...")
+st.info("Tentativo di connessione a MongoDB...")
 try:
     MONGO_URI=st.secrets["MONGO_URI"]
     server_api = ServerApi('1')
@@ -31,7 +31,7 @@ try:
     tournaments_collection = db_tournaments.get_collection("SuperbaSvizzero")
     _ = tournaments_collection.find_one()
 
-    st.toast("✅ Connessione a MongoDB Atlas riuscita.")
+    st.success("✅ Connessione a MongoDB Atlas riuscita.")
 except Exception as e:
     st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
 
@@ -64,11 +64,11 @@ def salva_torneo_su_db():
                 {"_id": existing_doc["_id"]},
                 {"$set": torneo_data}
             )
-            st.toast(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
+            st.success(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
         else:
             # Crea un nuovo documento
             tournaments_collection.insert_one(torneo_data)
-            st.toast(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+            st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
@@ -116,7 +116,7 @@ def carica_giocatori_da_db():
                 st.warning("⚠️ La collection 'superba_players' è vuota o non esiste. Non è stato caricato alcun giocatore.")
                 return pd.DataFrame()
             else:
-                st.toast(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
+                st.info(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
             
             df = pd.DataFrame(list(players_collection.find()))
             
@@ -351,7 +351,7 @@ if st.session_state.setup_mode == "carica_db":
         opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
         if st.button("Carica Torneo Selezionato"):
             if carica_torneo_da_db(opzione_scelta):
-                st.toast("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
+                st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
                 st.session_state.torneo_finito = False
                 st.rerun()
     else:
@@ -420,7 +420,7 @@ if st.session_state.setup_mode == "nuovo":
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown("### Modifica i nomi delle squadre e il potenziale")
-        st.toast("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
+        st.info("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
         
         if 'gioc_info' not in st.session_state:
             st.session_state['gioc_info'] = {}
@@ -443,10 +443,11 @@ if st.session_state.setup_mode == "nuovo":
                     key=f"squadra_input_{gioc}"
                 )
                 
+                # Modifica della scala del potenziale
                 potenziale_nuovo = st.slider(
                     f"Potenziale",
                     min_value=0,
-                    max_value=100,
+                    max_value=10, # Modificato da 100 a 10
                     value=int(st.session_state['gioc_info'][gioc]["Potenziale"]),
                     key=f"potenziale_slider_{gioc}"
                 )
@@ -509,6 +510,19 @@ with st.sidebar:
                 salva_torneo_su_db()
         st.markdown("---")
         
+        # Corretta implementazione dell'esportazione PDF
+        if not st.session_state.df_torneo.empty:
+            pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+            file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            st.download_button(
+                label="⬇️ Esporta torneo in PDF",
+                data=pdf_bytes,
+                file_name=file_name_pdf,
+                mime="application/pdf",
+                use_container_width=True
+            )
+        st.markdown("---")
+
         if st.button("🏁 Termina Torneo"):
             st.session_state.torneo_iniziato = False
             st.session_state.setup_mode = None
@@ -571,7 +585,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
         if not classifica_attuale.empty:
             st.dataframe(classifica_attuale, hide_index=True, use_container_width=True)
         else:
-            st.toast("Nessuna partita giocata per aggiornare la classifica.")
+            st.info("Nessuna partita giocata per aggiornare la classifica.")
             
     with col_next:
         st.subheader("Prossimo Turno")
@@ -595,20 +609,6 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
         else:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
 
-# -------------------------
-# Esportazione
-# -------------------------
-if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
-    file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    
-    st.sidebar.download_button(
-        label="⬇️ Esporta torneo in PDF",
-        data=pdf_bytes,
-        file_name=file_name_pdf,
-        mime="application/pdf"
-    )
-        
 # -------------------------
 # Banner vincitore
 # -------------------------
