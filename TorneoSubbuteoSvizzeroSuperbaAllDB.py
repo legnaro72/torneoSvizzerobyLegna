@@ -135,7 +135,6 @@ def carica_giocatori_da_db():
         st.warning("⚠️ La connessione a MongoDB non è attiva.")
         return pd.DataFrame()
 
-
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
@@ -385,7 +384,8 @@ if st.session_state.setup_mode == "nuovo":
         if num_mancanti > 0:
             st.markdown(f"**Mancano {num_mancanti} giocatori per raggiungere il numero totale.**")
             for i in range(num_mancanti):
-                ospite_name = st.text_input(f"Nome Giocatore Ospite {i+1}", key=f"ospite_player_{i}")
+                # Usiamo un'espressione per il valore di default per mantenere il dato
+                ospite_name = st.text_input(f"Nome Giocatore Ospite {i+1}", key=f"ospite_player_{i}", value=st.session_state.giocatori_ospiti[i] if i < len(st.session_state.giocatori_ospiti) else "")
                 if i >= len(st.session_state.giocatori_ospiti):
                     st.session_state.giocatori_ospiti.append(ospite_name)
                 else:
@@ -397,7 +397,6 @@ if st.session_state.setup_mode == "nuovo":
             if len(st.session_state.giocatori_totali) != num_squadre:
                 st.error(f"Il numero di giocatori selezionati ({len(st.session_state.giocatori_totali)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
             else:
-                # Create DataFrame with default values for next step
                 data_squadre = []
                 giocatori_db_df = carica_giocatori_da_db()
                 for player in st.session_state.giocatori_totali:
@@ -427,9 +426,18 @@ if st.session_state.setup_mode == "nuovo":
             num_rows="dynamic",
             use_container_width=True,
             column_config={
+                "Giocatore": st.column_config.TextColumn(
+                    "Giocatore",
+                    help="Nome del giocatore",
+                    disabled=True # Rende il nome del giocatore non modificabile
+                ),
+                "Squadra": st.column_config.TextColumn(
+                    "Squadra",
+                    help="Nome della squadra del giocatore"
+                ),
                 "Potenziale": st.column_config.NumberColumn(
                     "Potenziale",
-                    help="Valore di potenziale del giocatore (influenza il seed)",
+                    help="Valore di potenziale del giocatore (influenzato il seed)",
                     min_value=0,
                     max_value=100
                 )
@@ -555,6 +563,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
 
             if not df_turno_prossimo.empty:
                 if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
+                    salva_torneo_su_db() # Salva i risultati del turno corrente
                     st.session_state.turno_attivo += 1
                     df_turno_prossimo["Turno"] = st.session_state.turno_attivo
                     st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
