@@ -286,7 +286,8 @@ for key, default in {
     "setup_mode": None,
     "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
     "torneo_finito": False,
-    "edited_df_squadre": pd.DataFrame()
+    "edited_df_squadre": pd.DataFrame(),
+    "gioc_info": {}
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -335,6 +336,7 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
             st.session_state.club_scelto = "Superba"
             st.session_state.torneo_finito = False
             st.session_state.edited_df_squadre = pd.DataFrame()
+            st.session_state.gioc_info = {} # Reset del dizionario per la nuova grafica
             st.rerun()
 
     st.markdown("---")
@@ -384,7 +386,6 @@ if st.session_state.setup_mode == "nuovo":
         if num_mancanti > 0:
             st.markdown(f"**Mancano {num_mancanti} giocatori per raggiungere il numero totale.**")
             for i in range(num_mancanti):
-                # Usiamo un'espressione per il valore di default per mantenere il dato
                 ospite_name = st.text_input(f"Nome Giocatore Ospite {i+1}", key=f"ospite_player_{i}", value=st.session_state.giocatori_ospiti[i] if i < len(st.session_state.giocatori_ospiti) else "")
                 if i >= len(st.session_state.giocatori_ospiti):
                     st.session_state.giocatori_ospiti.append(ospite_name)
@@ -419,49 +420,66 @@ if st.session_state.setup_mode == "nuovo":
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown("### Modifica i nomi delle squadre e il potenziale")
-        st.info("Puoi modificare il nome dei giocatori, il nome delle squadre e il potenziale direttamente nella tabella.")
+        st.info("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
         
-        st.session_state.edited_df_squadre = st.data_editor(
-            st.session_state.df_squadre,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Giocatore": st.column_config.TextColumn(
-                    "Giocatore",
-                    help="Nome del giocatore",
-                    disabled=True 
-                ),
-                "Squadra": st.column_config.TextColumn(
-                    "Squadra",
-                    help="Nome della squadra del giocatore"
-                ),
-                "Potenziale": st.column_config.NumberColumn(
-                    "Potenziale",
-                    help="Valore di potenziale del giocatore (influenzato il seed)",
-                    min_value=0,
-                    max_value=100
+        if 'gioc_info' not in st.session_state:
+            st.session_state['gioc_info'] = {}
+
+        for gioc_df in st.session_state.df_squadre.to_dict('records'):
+            gioc = gioc_df['Giocatore']
+            
+            if gioc not in st.session_state['gioc_info']:
+                st.session_state['gioc_info'][gioc] = {
+                    "Squadra": gioc_df['Squadra'],
+                    "Potenziale": int(gioc_df['Potenziale'])
+                }
+
+            with st.container(border=True):
+                st.markdown(f"**Giocatore**: {gioc}")
+                
+                squadra_nuova = st.text_input(
+                    f"Squadra",
+                    value=st.session_state['gioc_info'][gioc]["Squadra"],
+                    key=f"squadra_input_{gioc}"
                 )
-            }
-        )
-        
+                
+                potenziale_nuovo = st.slider(
+                    f"Potenziale",
+                    min_value=0,
+                    max_value=100,
+                    value=int(st.session_state['gioc_info'][gioc]["Potenziale"]),
+                    key=f"potenziale_slider_{gioc}"
+                )
+                
+                st.session_state['gioc_info'][gioc]["Squadra"] = squadra_nuova
+                st.session_state['gioc_info'][gioc]["Potenziale"] = potenziale_nuovo
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Genera calendario", type="primary"):
-                df_finale = st.session_state.edited_df_squadre
-                st.session_state.df_squadre = df_finale
+                df_squadre_aggiornato = []
+                for gioc, info in st.session_state['gioc_info'].items():
+                    df_squadre_aggiornato.append({
+                        "Giocatore": gioc,
+                        "Squadra": info["Squadra"],
+                        "Potenziale": info["Potenziale"]
+                    })
+                
+                st.session_state.df_squadre = pd.DataFrame(df_squadre_aggiornato)
+                
                 st.session_state.torneo_iniziato = True
                 st.session_state.turno_attivo = 1
                 
                 classifica_iniziale = pd.DataFrame({
-                    "Squadra": df_finale['Squadra'].tolist(),
-                    "Punti": [0] * len(df_finale),
-                    "G": [0] * len(df_finale),
-                    "V": [0] * len(df_finale),
-                    "N": [0] * len(df_finale),
-                    "P": [0] * len(df_finale),
-                    "GF": [0] * len(df_finale),
-                    "GS": [0] * len(df_finale),
-                    "DR": [0] * len(df_finale),
+                    "Squadra": st.session_state.df_squadre['Squadra'].tolist(),
+                    "Punti": [0] * len(st.session_state.df_squadre),
+                    "G": [0] * len(st.session_state.df_squadre),
+                    "V": [0] * len(st.session_state.df_squadre),
+                    "N": [0] * len(st.session_state.df_squadre),
+                    "P": [0] * len(st.session_state.df_squadre),
+                    "GF": [0] * len(st.session_state.df_squadre),
+                    "GS": [0] * len(st.session_state.df_squadre),
+                    "DR": [0] * len(st.session_state.df_squadre),
                 }).set_index('Squadra')
 
                 precedenti = set()
