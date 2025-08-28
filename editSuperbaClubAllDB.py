@@ -57,7 +57,6 @@ def carica_tornei_all_italiana():
             return df.sort_values(by="Torneo").reset_index(drop=True)
     return pd.DataFrame(columns=["Torneo"])
 
----
 
 # Modifica la funzione carica_tornei_svizzeri
 def carica_tornei_svizzeri():
