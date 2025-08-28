@@ -126,7 +126,7 @@ def carica_giocatori_da_db():
             if 'Giocatore' not in df.columns:
                 st.error("❌ Errore: la colonna 'Giocatore' non è presente nel database dei giocatori.")
                 return pd.DataFrame()
-                
+            
             return df
         except Exception as e:
             st.error(f"❌ Errore durante la lettura dalla collection dei giocatori: {e}")
@@ -280,8 +280,9 @@ for key, default in {
     "risultati_temp": {},
     "nuovo_torneo_step": 1,
     "club_scelto": "Superba",
-    "giocatori_scelti": [],
-    "squadre_data": [],
+    "giocatori_selezionati_db": [],
+    "giocatori_ospiti": [],
+    "giocatori_totali": [],
     "torneo_iniziato": False,
     "setup_mode": None,
     "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
@@ -329,8 +330,9 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
         if st.button("Nuovo torneo", key="btn_nuovo"):
             st.session_state.setup_mode = "nuovo"
             st.session_state.nuovo_torneo_step = 0
-            st.session_state.giocatori_scelti = []
-            st.session_state.squadre_data = []
+            st.session_state.giocatori_selezionati_db = []
+            st.session_state.giocatori_ospiti = []
+            st.session_state.giocatori_totali = []
             st.session_state.club_scelto = "Superba"
             st.session_state.torneo_finito = False
             st.session_state.edited_df_squadre = pd.DataFrame()
@@ -373,28 +375,41 @@ if st.session_state.setup_mode == "nuovo":
         num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
 
         if not df_gioc.empty:
-            st.session_state.giocatori_scelti = st.multiselect(
+            st.session_state.giocatori_selezionati_db = st.multiselect(
                 "Seleziona i giocatori che partecipano al torneo (dal database)",
                 options=df_gioc['Giocatore'].tolist(),
-                default=st.session_state.giocatori_scelti,
+                default=st.session_state.giocatori_selezionati_db,
             )
         
-        num_mancanti = num_squadre - len(st.session_state.giocatori_scelti)
-        giocatori_ospiti = []
+        num_mancanti = num_squadre - len(st.session_state.giocatori_selezionati_db)
         if num_mancanti > 0:
             st.markdown(f"**Mancano {num_mancanti} giocatori per raggiungere il numero totale.**")
             for i in range(num_mancanti):
                 ospite_name = st.text_input(f"Nome Giocatore Ospite {i+1}", key=f"ospite_player_{i}")
-                giocatori_ospiti.append(ospite_name)
+                if i >= len(st.session_state.giocatori_ospiti):
+                    st.session_state.giocatori_ospiti.append(ospite_name)
+                else:
+                    st.session_state.giocatori_ospiti[i] = ospite_name
 
-        tutti_i_giocatori = st.session_state.giocatori_scelti + [p for p in giocatori_ospiti if p.strip()]
+        st.session_state.giocatori_totali = st.session_state.giocatori_selezionati_db + [p for p in st.session_state.giocatori_ospiti if p.strip()]
         
         if st.button("Accetta giocatori", key="next_step_1"):
-            if len(tutti_i_giocatori) != num_squadre:
-                st.error(f"Il numero di giocatori selezionati ({len(tutti_i_giocatori)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
+            if len(st.session_state.giocatori_totali) != num_squadre:
+                st.error(f"Il numero di giocatori selezionati ({len(st.session_state.giocatori_totali)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
             else:
-                st.session_state.squadre_data = tutti_i_giocatori
-                st.session_state.df_squadre = pd.DataFrame({'Giocatore': tutti_i_giocatori, 'Squadra': tutti_i_giocatori})
+                # Create DataFrame with default values for next step
+                data_squadre = []
+                giocatori_db_df = carica_giocatori_da_db()
+                for player in st.session_state.giocatori_totali:
+                    if player in giocatori_db_df['Giocatore'].tolist():
+                        player_info = giocatori_db_df[giocatori_db_df['Giocatore'] == player].iloc[0]
+                        squadra = player_info.get('Squadra', player)
+                        potenziale = player_info.get('Potenziale', 0)
+                        data_squadre.append({'Giocatore': player, 'Squadra': squadra, 'Potenziale': potenziale})
+                    else:
+                        data_squadre.append({'Giocatore': player, 'Squadra': player, 'Potenziale': 0})
+                
+                st.session_state.df_squadre = pd.DataFrame(data_squadre)
                 st.session_state.nuovo_torneo_step = 2
                 st.rerun()
 
@@ -404,13 +419,21 @@ if st.session_state.setup_mode == "nuovo":
 
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
-        st.markdown("### Modifica i nomi delle squadre")
-        st.info("Puoi modificare il nome dei giocatori e delle squadre direttamente nella tabella.")
+        st.markdown("### Modifica i nomi delle squadre e il potenziale")
+        st.info("Puoi modificare il nome dei giocatori, il nome delle squadre e il potenziale direttamente nella tabella.")
         
         st.session_state.edited_df_squadre = st.data_editor(
             st.session_state.df_squadre,
             num_rows="dynamic",
             use_container_width=True,
+            column_config={
+                "Potenziale": st.column_config.NumberColumn(
+                    "Potenziale",
+                    help="Valore di potenziale del giocatore (influenza il seed)",
+                    min_value=0,
+                    max_value=100
+                )
+            }
         )
         
         col1, col2 = st.columns(2)
