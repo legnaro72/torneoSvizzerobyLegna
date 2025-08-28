@@ -33,39 +33,41 @@ def salva_dati_su_mongo(df):
 
 # --- Sezione per la gestione dei tornei ---
 def carica_tornei_all_italiana():
-    """Carica tutti i tornei all'italiana dalla collezione PierCrew."""
+    """Carica tutti i tornei all'italiana dalla collezione Superba."""
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei = db_tornei["Superba"]
     data = list(collection_tornei.find())
-    if data:
-        df = pd.DataFrame(data)
-        df = df.drop(columns=["_id"], errors="ignore")
-        return df.sort_values(by="Torneo").reset_index(drop=True)
-    else:
+    if not data:
+        # Restituisce un DataFrame vuoto subito se non ci sono dati
         return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+    
+    df = pd.DataFrame(data)
+    df = df.drop(columns=["_id"], errors="ignore")
+    return df.sort_values(by="Torneo").reset_index(drop=True)
 
 def carica_tornei_svizzeri():
-    """Carica tutti i tornei svizzeri dalla collezione PierCrewSvizzero."""
+    """Carica tutti i tornei svizzeri dalla collezione SuperbaSvizzero."""
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
     data = list(collection_tornei.find())
-    if data:
-        df = pd.DataFrame(data)
-        df = df.drop(columns=["_id"], errors="ignore")
-        return df.sort_values(by="Torneo").reset_index(drop=True)
-    else:
+    if not data:
+        # Restituisce un DataFrame vuoto subito se non ci sono dati
         return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+    
+    df = pd.DataFrame(data)
+    df = df.drop(columns=["_id"], errors="ignore")
+    return df.sort_values(by="Torneo").reset_index(drop=True)
 
 def salva_tornei_all_italiana(df):
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei = db_tornei["Superba"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
     st.success("Dati dei tornei all'italiana salvati con successo!")
 
 def salva_tornei_svizzeri(df):
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
     st.success("Dati dei tornei svizzeri salvati con successo!")
