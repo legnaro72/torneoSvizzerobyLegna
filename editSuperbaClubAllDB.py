@@ -23,8 +23,8 @@ def carica_dati_da_mongo():
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        df = df.sort_values(by="Giocatore").reset_index(drop=True)
-        return df[["Giocatore", "Squadra", "Potenziale"]]
+        if "Giocatore" in df.columns:
+            return df.sort_values(by="Giocatore").reset_index(drop=True)
     return pd.DataFrame(columns=["Giocatore", "Squadra", "Potenziale"])
 
 def salva_dati_su_mongo(df):
@@ -41,7 +41,9 @@ def carica_tornei_all_italiana():
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        return df.sort_values(by="Torneo").reset_index(drop=True)
+        # Controlla se la colonna esiste prima di ordinarla
+        if "Torneo" in df.columns:
+            return df.sort_values(by="Torneo").reset_index(drop=True)
     return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_all_italiana(df):
@@ -60,7 +62,9 @@ def carica_tornei_svizzeri():
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        return df.sort_values(by="Torneo").reset_index(drop=True)
+        # Controlla se la colonna esiste prima di ordinarla
+        if "Torneo" in df.columns:
+            return df.sort_values(by="Torneo").reset_index(drop=True)
     return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_svizzeri(df):
