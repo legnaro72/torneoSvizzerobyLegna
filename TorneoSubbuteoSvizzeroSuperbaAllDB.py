@@ -78,7 +78,7 @@ def carica_nomi_tornei_da_db():
         return []
     try:
         tornei = tournaments_collection.find({}, {"nome_torneo": 1}).sort("data_salvataggio", -1)
-        return list(tornei)
+        return list(t['nome_torneo'] for t in tornei)
     except Exception as e:
         st.error(f"❌ Errore caricamento nomi tornei: {e}")
         return []
@@ -339,8 +339,7 @@ if st.session_state.setup_mode == "carica_db":
     st.markdown("#### 📥 Carica torneo da MongoDB")
     tornei_disponibili = carica_nomi_tornei_da_db()
     if tornei_disponibili:
-        nomi_tornei = [t['nome_torneo'] for t in tornei_disponibili]
-        opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", nomi_tornei)
+        opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
         if st.button("Carica Torneo Selezionato"):
             if carica_torneo_da_db(opzione_scelta):
                 st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
@@ -378,6 +377,7 @@ if st.session_state.setup_mode == "carica_csv":
             init_results_temp_from_df(st.session_state.df_torneo)
             st.session_state.torneo_iniziato = True
             st.session_state.setup_mode = None
+            st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
             st.rerun()
 
 if st.session_state.setup_mode == "nuovo":
@@ -493,12 +493,12 @@ if st.session_state.torneo_iniziato:
     st.markdown(f"### Turno {st.session_state.turno_attivo}")
     df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
     
-    col_matches = st.columns(len(df_turno_corrente))
-    
-    for i, riga in df_turno_corrente.iterrows():
-        with col_matches[i]:
+    if df_turno_corrente.empty:
+        st.warning("⚠️ Non ci sono partite in questo turno. Torna indietro per aggiungere giocatori o carica un altro torneo.")
+    else:
+        for i, riga in df_turno_corrente.iterrows():
             with st.container(border=True):
-                st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita {i+1}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita</p>", unsafe_allow_html=True)
                 casa = riga['Casa']
                 ospite = riga['Ospite']
                 key_gc = f"gc_{st.session_state.turno_attivo}_{casa}_{ospite}"
