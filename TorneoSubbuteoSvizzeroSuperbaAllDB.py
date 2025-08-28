@@ -286,6 +286,7 @@ for key, default in {
     "setup_mode": None,
     "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
     "torneo_finito": False,
+    "edited_df_squadre": pd.DataFrame()
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -329,8 +330,10 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
             st.session_state.setup_mode = "nuovo"
             st.session_state.nuovo_torneo_step = 0
             st.session_state.giocatori_scelti = []
+            st.session_state.squadre_data = []
             st.session_state.club_scelto = "Superba"
             st.session_state.torneo_finito = False
+            st.session_state.edited_df_squadre = pd.DataFrame()
             st.rerun()
 
     st.markdown("---")
@@ -354,37 +357,6 @@ if st.session_state.setup_mode == "carica_db":
         st.session_state.setup_mode = None
         st.rerun()
 
-
-if st.session_state.setup_mode == "carica_csv":
-    st.markdown("#### 📥 Carica CSV torneo")
-    file = st.file_uploader("Carica file CSV del torneo (es. esportazione dell'app)", type="csv")
-    if file:
-        df = carica_csv_robusto_da_file(file)
-        if not df.empty:
-            for col in ['Casa','Ospite','GolCasa','GolOspite','Validata','Turno']:
-                if col not in df.columns:
-                    if col in ['GolCasa','GolOspite']:
-                        df[col] = 0
-                    elif col == 'Validata':
-                        df[col] = False
-                    elif col == 'Turno':
-                        df['Turno'] = 1
-                    else:
-                        st.warning(f"Colonna {col} mancante nel CSV; il file potrebbe non contenere le info attese.")
-            df['GolCasa'] = df['GolCasa'].fillna(0).astype(int)
-            df['GolOspite'] = df['GolOspite'].fillna(0).astype(int)
-            df['Validata'] = df['Validata'].astype(bool)
-            if 'Turno' not in df.columns:
-                df['Turno'] = 1
-            st.session_state.df_torneo = df.reset_index(drop=True)
-            st.session_state.turno_attivo = int(st.session_state.df_torneo['Turno'].max())
-            init_results_temp_from_df(st.session_state.df_torneo)
-            st.session_state.torneo_iniziato = True
-            st.session_state.setup_mode = None
-            st.session_state.torneo_finito = False
-            st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
-            st.rerun()
-
 if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
     if st.session_state.nuovo_torneo_step == 0:
@@ -396,61 +368,69 @@ if st.session_state.setup_mode == "nuovo":
     elif st.session_state.nuovo_torneo_step == 1:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown(f"### Club selezionato: **{st.session_state.club_scelto}**")
-        # Legge i giocatori da MongoDB
         df_gioc = carica_giocatori_da_db()
         st.markdown("**Numero partecipanti** (min 2)")
         num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
 
         if not df_gioc.empty:
-            giocatori_df = df_gioc
             st.session_state.giocatori_scelti = st.multiselect(
-                "Seleziona i giocatori che partecipano al torneo",
-                options=giocatori_df['Giocatore'].tolist(),
+                "Seleziona i giocatori che partecipano al torneo (dal database)",
+                options=df_gioc['Giocatore'].tolist(),
                 default=st.session_state.giocatori_scelti,
             )
-        else:
-            st.warning("⚠️ Impossibile caricare i giocatori dal database. Aggiungi i giocatori manualmente.")
-            if 'giocatori_temp' not in st.session_state:
-                st.session_state.giocatori_temp = [""] * num_squadre
-            for i in range(num_squadre):
-                st.session_state.giocatori_temp[i] = st.text_input(f"Nome Giocatore {i+1}", key=f"manual_player_{i}", value=st.session_state.giocatori_temp[i])
+        
+        num_mancanti = num_squadre - len(st.session_state.giocatori_scelti)
+        giocatori_ospiti = []
+        if num_mancanti > 0:
+            st.markdown(f"**Mancano {num_mancanti} giocatori per raggiungere il numero totale.**")
+            for i in range(num_mancanti):
+                ospite_name = st.text_input(f"Nome Giocatore Ospite {i+1}", key=f"ospite_player_{i}")
+                giocatori_ospiti.append(ospite_name)
 
-            st.session_state.giocatori_scelti = [p for p in st.session_state.giocatori_temp if p.strip()]
-
-        if st.session_state.giocatori_scelti and st.button("Prossimo passo", key="next_step_1"):
-            if len(st.session_state.giocatori_scelti) < 2:
-                st.error("Devi selezionare almeno 2 giocatori per iniziare il torneo.")
+        tutti_i_giocatori = st.session_state.giocatori_scelti + [p for p in giocatori_ospiti if p.strip()]
+        
+        if st.button("Accetta giocatori", key="next_step_1"):
+            if len(tutti_i_giocatori) != num_squadre:
+                st.error(f"Il numero di giocatori selezionati ({len(tutti_i_giocatori)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
             else:
-                st.session_state.squadre_data = st.session_state.giocatori_scelti
+                st.session_state.squadre_data = tutti_i_giocatori
+                st.session_state.df_squadre = pd.DataFrame({'Giocatore': tutti_i_giocatori, 'Squadra': tutti_i_giocatori})
                 st.session_state.nuovo_torneo_step = 2
                 st.rerun()
+
         if st.button("Indietro"):
             st.session_state.nuovo_torneo_step = 0
             st.rerun()
 
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
-        st.markdown(f"**Giocatori selezionati:** {', '.join(st.session_state.squadre_data)}")
-        st.markdown("### Conferma giocatori e inizia torneo")
+        st.markdown("### Modifica i nomi delle squadre")
+        st.info("Puoi modificare il nome dei giocatori e delle squadre direttamente nella tabella.")
+        
+        st.session_state.edited_df_squadre = st.data_editor(
+            st.session_state.df_squadre,
+            num_rows="dynamic",
+            use_container_width=True,
+        )
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Inizia Torneo", type="primary"):
-                squadre_shuffled = pd.DataFrame({'Squadra': st.session_state.squadre_data}).sample(frac=1).reset_index(drop=True)
-                st.session_state.df_squadre = squadre_shuffled
+            if st.button("Genera calendario", type="primary"):
+                df_finale = st.session_state.edited_df_squadre
+                st.session_state.df_squadre = df_finale
                 st.session_state.torneo_iniziato = True
                 st.session_state.turno_attivo = 1
                 
                 classifica_iniziale = pd.DataFrame({
-                    "Squadra": st.session_state.squadre_data,
-                    "Punti": [0] * len(st.session_state.squadre_data),
-                    "G": [0] * len(st.session_state.squadre_data),
-                    "V": [0] * len(st.session_state.squadre_data),
-                    "N": [0] * len(st.session_state.squadre_data),
-                    "P": [0] * len(st.session_state.squadre_data),
-                    "GF": [0] * len(st.session_state.squadre_data),
-                    "GS": [0] * len(st.session_state.squadre_data),
-                    "DR": [0] * len(st.session_state.squadre_data),
+                    "Squadra": df_finale['Squadra'].tolist(),
+                    "Punti": [0] * len(df_finale),
+                    "G": [0] * len(df_finale),
+                    "V": [0] * len(df_finale),
+                    "N": [0] * len(df_finale),
+                    "P": [0] * len(df_finale),
+                    "GF": [0] * len(df_finale),
+                    "GS": [0] * len(df_finale),
+                    "DR": [0] * len(df_finale),
                 }).set_index('Squadra')
 
                 precedenti = set()
@@ -488,6 +468,7 @@ with st.sidebar:
             st.session_state.turno_attivo = 0
             st.session_state.risultati_temp = {}
             st.session_state.nuovo_torneo_step = 1
+            st.session_state.torneo_finito = False
             st.success("✅ Torneo terminato. Dati resettati.")
             st.rerun()
 
