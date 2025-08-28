@@ -4,13 +4,13 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
 # Dati di connessione a MongoDB forniti dall'utente
-MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
+MONGO_URI_PLAYERS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS_CH = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
 # Crea tre connessioni separate come richiesto
 try:
-    client_players = MongoClient(MONGO_URI, server_api=ServerApi('1'))
+    client_players = MongoClient(MONGO_URI_PLAYERS, server_api=ServerApi('1'))
     client_italiana = MongoClient(MONGO_URI_TOURNEMENTS, server_api=ServerApi('1'))
     client_svizzera = MongoClient(MONGO_URI_TOURNEMENTS_CH, server_api=ServerApi('1'))
     
@@ -167,7 +167,10 @@ if st.session_state.edit_index is None:
     st.header("Gestione Giocatori")
     st.subheader("Lista giocatori")
     df = st.session_state.df_giocatori.copy()
-    st.dataframe(df, use_container_width=True)
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("Nessun giocatore trovato. Aggiungine uno per iniziare!")
 
     col1, col2 = st.columns(2)
     with col1:
