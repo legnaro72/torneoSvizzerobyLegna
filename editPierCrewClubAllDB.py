@@ -60,7 +60,7 @@ def salva_tornei_all_italiana(df):
     collection_tornei = db_tornei["PierCrew"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
-    st.success("Dati dei tornei all'italiana salvati con successo!")
+    st.toast("Dati dei tornei all'italiana salvati con successo!")
 
 def carica_tornei_svizzeri():
     """Carica solo i nomi dei tornei svizzeri dalla collezione PierCrewSvizzero."""
@@ -80,7 +80,7 @@ def salva_tornei_svizzeri(df):
     collection_tornei = db_tornei["PierCrewSvizzero"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
-    st.success("Dati dei tornei svizzeri salvati con successo!")
+    st.toast("Dati dei tornei svizzeri salvati con successo!")
 
 
 st.set_page_config(page_title="Gestione PierCrew All-in-one", layout="wide")
@@ -107,13 +107,13 @@ def save_player(giocatore, squadra, potenziale):
         if st.session_state.edit_index == -1:
             nuova_riga = {"Giocatore": giocatore.strip(), "Squadra": squadra.strip(), "Potenziale": potenziale}
             st.session_state.df_giocatori = pd.concat([st.session_state.df_giocatori, pd.DataFrame([nuova_riga])], ignore_index=True)
-            st.success(f"Giocatore '{giocatore}' aggiunto!")
+            st.toast(f"Giocatore '{giocatore}' aggiunto!")
         else:
             idx = st.session_state.edit_index
             st.session_state.df_giocatori.at[idx, "Giocatore"] = giocatore.strip()
             st.session_state.df_giocatori.at[idx, "Squadra"] = squadra.strip()
             st.session_state.df_giocatori.at[idx, "Potenziale"] = potenziale
-            st.success(f"Giocatore '{giocatore}' aggiornato!")
+            st.toast(f"Giocatore '{giocatore}' aggiornato!")
             
         st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
         salva_dati_su_mongo(st.session_state.df_giocatori)
@@ -125,7 +125,7 @@ def modify_player(idx):
 
 def delete_player(idx, selected_player):
     st.session_state.df_giocatori = st.session_state.df_giocatori.drop(idx).reset_index(drop=True)
-    st.success(f"Giocatore '{selected_player}' eliminato!")
+    st.toast(f"Giocatore '{selected_player}' eliminato!")
     st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
     salva_dati_su_mongo(st.session_state.df_giocatori)
     st.rerun()
@@ -137,7 +137,7 @@ def delete_torneo_italiana(selected_tornei):
     for torneo in selected_tornei:
         collection_tornei.delete_one({"nome_torneo": torneo})
         st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
-        st.success(f"Torneo '{torneo}' eliminato!")
+        st.toast(f"Torneo '{torneo}' eliminato!")
     st.rerun()
 
 def delete_torneo_svizzero(selected_tornei):
@@ -146,7 +146,7 @@ def delete_torneo_svizzero(selected_tornei):
     for torneo in selected_tornei:
         collection_tornei.delete_one({"nome_torneo": torneo})
         st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
-        st.success(f"Torneo '{torneo}' eliminato!")
+        st.toast(f"Torneo '{torneo}' eliminato!")
     st.rerun()
     
 # Nuove funzioni per la cancellazione totale
@@ -155,7 +155,7 @@ def delete_all_tornei_italiana():
     collection_tornei = db_tornei["PierCrew"]
     collection_tornei.delete_many({})
     st.session_state.df_tornei_italiana = carica_tornei_all_italiana() # Ricarica il dataframe vuoto
-    st.success("✅ Tutti i tornei all'italiana sono stati eliminati!")
+    st.toast("✅ Tutti i tornei all'italiana sono stati eliminati!")
     st.rerun()
 
 def delete_all_tornei_svizzeri():
@@ -163,7 +163,7 @@ def delete_all_tornei_svizzeri():
     collection_tornei = db_tornei["PierCrewSvizzero"]
     collection_tornei.delete_many({})
     st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri() # Ricarica il dataframe vuoto
-    st.success("✅ Tutti i tornei svizzeri sono stati eliminati!")
+    st.toast("✅ Tutti i tornei svizzeri sono stati eliminati!")
     st.rerun()
 
 def delete_all_tornei_all():
