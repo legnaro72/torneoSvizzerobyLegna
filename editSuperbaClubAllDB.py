@@ -33,18 +33,16 @@ def salva_dati_su_mongo(df):
 
 # --- Sezione per la gestione dei tornei ---
 def carica_tornei_all_italiana():
-    """Carica tutti i tornei all'italiana dalla collezione PierCrew."""
+    """Carica solo i nomi dei tornei all'italiana dalla collezione PierCrew."""
     db_tornei = client["TorneiSubbuteo"]
     collection_tornei = db_tornei["PierCrew"]
-    data = list(collection_tornei.find())
+    # Richiede solo il campo 'Torneo' per una visualizzazione semplificata
+    data = list(collection_tornei.find({}, {"Torneo": 1}))
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        # Eseguiamo l'ordinamento solo se il DataFrame non è vuoto
-        if not df.empty and "Torneo" in df.columns:
-            df = df.sort_values(by="Torneo").reset_index(drop=True)
-        return df
-    return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+        return df.sort_values(by="Torneo").reset_index(drop=True)
+    return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_all_italiana(df):
     db_tornei = client["TorneiSubbuteo"]
@@ -54,18 +52,16 @@ def salva_tornei_all_italiana(df):
     st.success("Dati dei tornei all'italiana salvati con successo!")
 
 def carica_tornei_svizzeri():
-    """Carica tutti i tornei svizzeri dalla collezione PierCrewSvizzero."""
+    """Carica solo i nomi dei tornei svizzeri dalla collezione PierCrewSvizzero."""
     db_tornei = client["TorneiSubbuteo"]
     collection_tornei = db_tornei["PierCrewSvizzero"]
-    data = list(collection_tornei.find())
+    # Richiede solo il campo 'Torneo' per una visualizzazione semplificata
+    data = list(collection_tornei.find({}, {"Torneo": 1}))
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        # Eseguiamo l'ordinamento solo se il DataFrame non è vuoto
-        if not df.empty and "Torneo" in df.columns:
-            df = df.sort_values(by="Torneo").reset_index(drop=True)
-        return df
-    return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+        return df.sort_values(by="Torneo").reset_index(drop=True)
+    return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_svizzeri(df):
     db_tornei = client["TorneiSubbuteo"]
@@ -134,6 +130,28 @@ def delete_torneo_svizzero(idx, selected_torneo):
     st.success(f"Torneo '{selected_torneo}' eliminato!")
     salva_tornei_svizzeri(st.session_state.df_tornei_svizzeri)
     st.rerun()
+    
+# Nuove funzioni per la cancellazione totale
+def delete_all_tornei_italiana():
+    db_tornei = client["TorneiSubbuteo"]
+    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei.delete_many({})
+    st.session_state.df_tornei_italiana = carica_tornei_all_italiana() # Ricarica il dataframe vuoto
+    st.success("✅ Tutti i tornei all'italiana sono stati eliminati!")
+    st.rerun()
+
+def delete_all_tornei_svizzeri():
+    db_tornei = client["TorneiSubbuteo"]
+    collection_tornei = db_tornei["PierCrewSvizzero"]
+    collection_tornei.delete_many({})
+    st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri() # Ricarica il dataframe vuoto
+    st.success("✅ Tutti i tornei svizzeri sono stati eliminati!")
+    st.rerun()
+
+def delete_all_tornei_all():
+    delete_all_tornei_italiana()
+    delete_all_tornei_svizzeri()
+
 
 # Logica di visualizzazione basata sullo stato
 if st.session_state.edit_index is None:
@@ -166,9 +184,17 @@ if st.session_state.edit_index is None:
         mime="text/csv",
     )
 
-    # --- Sezione di gestione dei tornei ---
+    # ---
     st.markdown("---")
     st.header("Gestione Tornei")
+
+    col_del_all_ita, col_del_all_svizz, col_del_all = st.columns(3)
+    with col_del_all_ita:
+        st.button("❌ Cancella tutti i tornei all'italiana", on_click=delete_all_tornei_italiana)
+    with col_del_all_svizz:
+        st.button("❌ Cancella tutti i tornei svizzeri", on_click=delete_all_tornei_svizzeri)
+    with col_del_all:
+        st.button("❌ Cancella TUTTI i tornei", on_click=delete_all_tornei_all)
 
     # Sezione per i tornei all'italiana
     st.subheader("Tornei all'italiana")
@@ -180,10 +206,11 @@ if st.session_state.edit_index is None:
         
         if selected_torneo_italiana:
             idx_italiana = df_tornei_italiana.index[df_tornei_italiana["Torneo"] == selected_torneo_italiana][0]
-            st.button("🗑️ Elimina Torneo", on_click=delete_torneo_italiana, args=(idx_italiana, selected_torneo_italiana), key="del_italiana_btn")
+            st.button("🗑️ Elimina Torneo selezionato", on_click=delete_torneo_italiana, args=(idx_italiana, selected_torneo_italiana), key="del_italiana_btn")
     else:
         st.info("Nessun torneo all'italiana trovato.")
 
+    # ---
     st.markdown("---")
 
     # Sezione per i tornei svizzeri
@@ -196,7 +223,7 @@ if st.session_state.edit_index is None:
         
         if selected_torneo_svizzero:
             idx_svizzero = df_tornei_svizzeri.index[df_tornei_svizzeri["Torneo"] == selected_torneo_svizzero][0]
-            st.button("🗑️ Elimina Torneo Svizzero", on_click=delete_torneo_svizzero, args=(idx_svizzero, selected_torneo_svizzero), key="del_svizzero_btn")
+            st.button("🗑️ Elimina Torneo Svizzero selezionato", on_click=delete_torneo_svizzero, args=(idx_svizzero, selected_torneo_svizzero), key="del_svizzero_btn")
     else:
         st.info("Nessun torneo svizzero trovato.")
 
