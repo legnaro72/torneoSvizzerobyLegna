@@ -4,25 +4,31 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
 # Dati di connessione a MongoDB forniti dall'utente
-# Utilizziamo un solo URI visto che puntano tutti allo stesso cluster
 MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
+MONGO_URI_TOURNEMENTS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
+MONGO_URI_TOURNEMENTS_CH = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
-# Connessione a MongoDB
+# Crea tre connessioni separate come richiesto
 try:
-    client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
-    # Invia un ping al server per confermare la connessione
-    client.admin.command('ping')
-    st.sidebar.success("✅ Connessione a MongoDB riuscita!")
+    client_players = MongoClient(MONGO_URI, server_api=ServerApi('1'))
+    client_italiana = MongoClient(MONGO_URI_TOURNEMENTS, server_api=ServerApi('1'))
+    client_svizzera = MongoClient(MONGO_URI_TOURNEMENTS_CH, server_api=ServerApi('1'))
+    
+    # Invia un ping a ciascun client per confermare le connessioni
+    client_players.admin.command('ping')
+    client_italiana.admin.command('ping')
+    client_svizzera.admin.command('ping')
+    st.sidebar.success("✅ Connessioni a MongoDB riuscite!")
 except Exception as e:
     st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
     st.stop() # Interrompe l'app se la connessione fallisce
 
 # --- Sezione per la gestione dei giocatori ---
-db = client["giocatori_subbuteo"]
-collection = db["superba_players"]
+db_players = client_players["giocatori_subbuteo"]
+collection_players = db_players["superba_players"]
 
 def carica_dati_da_mongo():
-    data = list(collection.find())
+    data = list(collection_players.find())
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
@@ -31,26 +37,24 @@ def carica_dati_da_mongo():
     return pd.DataFrame(columns=["Giocatore", "Squadra", "Potenziale"])
 
 def salva_dati_su_mongo(df):
-    collection.delete_many({})
-    collection.insert_many(df.to_dict('records'))
+    collection_players.delete_many({})
+    collection_players.insert_many(df.to_dict('records'))
 
 # --- Sezione per la gestione dei tornei ---
 def carica_tornei_all_italiana():
     """Carica solo i nomi dei tornei all'italiana dalla collezione Superba."""
-    db_tornei = client["TorneiSubbuteo"]
+    db_tornei = client_italiana["TorneiSubbuteo"]
     collection_tornei = db_tornei["Superba"]
-    # Richiede solo il campo 'Torneo' per una visualizzazione semplificata
     data = list(collection_tornei.find({}, {"Torneo": 1}))
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        # Controlla se la colonna esiste prima di ordinarla
         if "Torneo" in df.columns:
             return df.sort_values(by="Torneo").reset_index(drop=True)
     return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_all_italiana(df):
-    db_tornei = client["TorneiSubbuteo"]
+    db_tornei = client_italiana["TorneiSubbuteo"]
     collection_tornei = db_tornei["Superba"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
@@ -58,20 +62,18 @@ def salva_tornei_all_italiana(df):
 
 def carica_tornei_svizzeri():
     """Carica solo i nomi dei tornei svizzeri dalla collezione SuperbaSvizzero."""
-    db_tornei = client["TorneiSubbuteo"]
+    db_tornei = client_svizzera["TorneiSubbuteo"]
     collection_tornei = db_tornei["SuperbaSvizzero"]
-    # Richiede solo il campo 'Torneo' per una visualizzazione semplificata
     data = list(collection_tornei.find({}, {"Torneo": 1}))
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        # Controlla se la colonna esiste prima di ordinarla
         if "Torneo" in df.columns:
             return df.sort_values(by="Torneo").reset_index(drop=True)
     return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_svizzeri(df):
-    db_tornei = client["TorneiSubbuteo"]
+    db_tornei = client_svizzera["TorneiSubbuteo"]
     collection_tornei = db_tornei["SuperbaSvizzero"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
@@ -140,7 +142,7 @@ def delete_torneo_svizzero(idx, selected_torneo):
     
 # Nuove funzioni per la cancellazione totale
 def delete_all_tornei_italiana():
-    db_tornei = client["TorneiSubbuteo"]
+    db_tornei = client_italiana["TorneiSubbuteo"]
     collection_tornei = db_tornei["Superba"]
     collection_tornei.delete_many({})
     st.session_state.df_tornei_italiana = carica_tornei_all_italiana() # Ricarica il dataframe vuoto
@@ -148,7 +150,7 @@ def delete_all_tornei_italiana():
     st.rerun()
 
 def delete_all_tornei_svizzeri():
-    db_tornei = client["TorneiSubbuteo"]
+    db_tornei = client_svizzera["TorneiSubbuteo"]
     collection_tornei = db_tornei["SuperbaSvizzero"]
     collection_tornei.delete_many({})
     st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri() # Ricarica il dataframe vuoto
