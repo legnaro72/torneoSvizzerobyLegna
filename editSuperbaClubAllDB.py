@@ -41,15 +41,37 @@ def salva_dati_su_mongo(df):
     collection_players.insert_many(df.to_dict('records'))
 
 # --- Sezione per la gestione dei tornei ---
+# Modifica la funzione carica_tornei_all_italiana
 def carica_tornei_all_italiana():
     """Carica solo i nomi dei tornei all'italiana dalla collezione Superba."""
     db_tornei = client_italiana["TorneiSubbuteo"]
     collection_tornei = db_tornei["Superba"]
-    data = list(collection_tornei.find({}, {"Torneo": 1}))
+    # Modifica la query per usare 'nome_torneo'
+    data = list(collection_tornei.find({}, {"nome_torneo": 1}))
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        if "Torneo" in df.columns:
+        # Rinomina la colonna 'nome_torneo' in 'Torneo'
+        if "nome_torneo" in df.columns:
+            df.rename(columns={"nome_torneo": "Torneo"}, inplace=True)
+            return df.sort_values(by="Torneo").reset_index(drop=True)
+    return pd.DataFrame(columns=["Torneo"])
+
+---
+
+# Modifica la funzione carica_tornei_svizzeri
+def carica_tornei_svizzeri():
+    """Carica solo i nomi dei tornei svizzeri dalla collezione SuperbaSvizzero."""
+    db_tornei = client_svizzera["TorneiSubbuteo"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
+    # Modifica la query per usare 'nome_torneo'
+    data = list(collection_tornei.find({}, {"nome_torneo": 1}))
+    if data:
+        df = pd.DataFrame(data)
+        df = df.drop(columns=["_id"], errors="ignore")
+        # Rinomina la colonna 'nome_torneo' in 'Torneo'
+        if "nome_torneo" in df.columns:
+            df.rename(columns={"nome_torneo": "Torneo"}, inplace=True)
             return df.sort_values(by="Torneo").reset_index(drop=True)
     return pd.DataFrame(columns=["Torneo"])
 
@@ -59,18 +81,6 @@ def salva_tornei_all_italiana(df):
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
     st.success("Dati dei tornei all'italiana salvati con successo!")
-
-def carica_tornei_svizzeri():
-    """Carica solo i nomi dei tornei svizzeri dalla collezione SuperbaSvizzero."""
-    db_tornei = client_svizzera["TorneiSubbuteo"]
-    collection_tornei = db_tornei["SuperbaSvizzero"]
-    data = list(collection_tornei.find({}, {"Torneo": 1}))
-    if data:
-        df = pd.DataFrame(data)
-        df = df.drop(columns=["_id"], errors="ignore")
-        if "Torneo" in df.columns:
-            return df.sort_values(by="Torneo").reset_index(drop=True)
-    return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_svizzeri(df):
     db_tornei = client_svizzera["TorneiSubbuteo"]
