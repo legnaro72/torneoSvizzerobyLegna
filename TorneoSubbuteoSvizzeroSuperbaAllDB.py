@@ -7,7 +7,34 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from bson.objectid import ObjectId
 
-st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="wide")
+# -------------------------
+# Session state (inizializzazione e aggiornamento nome torneo)
+# -------------------------
+for key, default in {
+    "df_torneo": pd.DataFrame(),
+    "df_squadre": pd.DataFrame(),
+    "turno_attivo": 0,
+    "risultati_temp": {},
+    "nuovo_torneo_step": 1,
+    "club_scelto": "Superba",
+    "giocatori_selezionati_db": [],
+    "giocatori_ospiti": [],
+    "giocatori_totali": [],
+    "torneo_iniziato": False,
+    "setup_mode": None,
+    "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
+    "torneo_finito": False,
+    "edited_df_squadre": pd.DataFrame(),
+    "gioc_info": {}
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+# Aggiornamento del nome del torneo se è finito
+if st.session_state.torneo_finito and not st.session_state.nome_torneo.startswith("finito_"):
+    st.session_state.nome_torneo = f"finito_{st.session_state.nome_torneo}"
+
+st.set_page_config(page_title=f"⚽ {st.session_state.nome_torneo}", layout="wide")
 
 # -------------------------
 # Connessione a MongoDB Atlas
@@ -15,7 +42,7 @@ st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="
 
 players_collection = None
 tournaments_collection = None
-st.toast("Tentativo di connessione a MongoDB...")
+st.info("Tentativo di connessione a MongoDB...")
 try:
     MONGO_URI=st.secrets["MONGO_URI"]
     server_api = ServerApi('1')
@@ -31,7 +58,7 @@ try:
     tournaments_collection = db_tournaments.get_collection("SuperbaSvizzero")
     _ = tournaments_collection.find_one()
 
-    st.toast("✅ Connessione a MongoDB Atlas riuscita.")
+    st.success("✅ Connessione a MongoDB Atlas riuscita.")
 except Exception as e:
     st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
 
@@ -64,11 +91,11 @@ def salva_torneo_su_db():
                 {"_id": existing_doc["_id"]},
                 {"$set": torneo_data}
             )
-            st.toast(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
+            st.success(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
         else:
             # Crea un nuovo documento
             tournaments_collection.insert_one(torneo_data)
-            st.toast(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+            st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
@@ -116,7 +143,7 @@ def carica_giocatori_da_db():
                 st.warning("⚠️ La collection 'superba_players' è vuota o non esiste. Non è stato caricato alcun giocatore.")
                 return pd.DataFrame()
             else:
-                st.toast(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
+                st.info(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
             
             df = pd.DataFrame(list(players_collection.find()))
             
@@ -171,14 +198,30 @@ def esporta_pdf(df_torneo, nome_torneo):
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Classifica attuale", ln=True)
-
+    
     classifica = aggiorna_classifica(df_torneo)
     if not classifica.empty:
-        pdf.set_font("Arial", "", 11)
+        # Aggiungo la classifica in formato tabellare
+        pdf.set_font("Arial", "B", 10)
+        header = ['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR']
+        col_widths = [45, 15, 10, 10, 10, 10, 10, 10, 10]
+        
+        for i, h in enumerate(header):
+            pdf.cell(col_widths[i], 8, h, border=1, ln=0, align='C')
+        pdf.ln()
+
+        pdf.set_font("Arial", "", 10)
         for _, row in classifica.iterrows():
-            line = f"{row['Squadra']} - Punti:{row['Punti']} G:{row['G']} V:{row['V']} N:{row['N']} P:{row['P']} GF:{row['GF']} GS:{row['GS']} DR:{row['DR']}"
-            line = line.encode("latin-1", "ignore").decode("latin-1")
-            pdf.cell(0, 8, line, ln=True)
+            pdf.cell(col_widths[0], 8, str(row['Squadra']).encode("latin-1", "ignore").decode("latin-1"), border=1)
+            pdf.cell(col_widths[1], 8, str(row['Punti']), border=1, align='C')
+            pdf.cell(col_widths[2], 8, str(row['G']), border=1, align='C')
+            pdf.cell(col_widths[3], 8, str(row['V']), border=1, align='C')
+            pdf.cell(col_widths[4], 8, str(row['N']), border=1, align='C')
+            pdf.cell(col_widths[5], 8, str(row['P']), border=1, align='C')
+            pdf.cell(col_widths[6], 8, str(row['GF']), border=1, align='C')
+            pdf.cell(col_widths[7], 8, str(row['GS']), border=1, align='C')
+            pdf.cell(col_widths[8], 8, str(row['DR']), border=1, align='C')
+            pdf.ln()
 
     return pdf.output(dest="S").encode("latin-1")
 
@@ -261,29 +304,6 @@ def init_results_temp_from_df(df):
 
 
 # -------------------------
-# Session state
-# -------------------------
-for key, default in {
-    "df_torneo": pd.DataFrame(),
-    "df_squadre": pd.DataFrame(),
-    "turno_attivo": 0,
-    "risultati_temp": {},
-    "nuovo_torneo_step": 1,
-    "club_scelto": "Superba",
-    "giocatori_selezionati_db": [],
-    "giocatori_ospiti": [],
-    "giocatori_totali": [],
-    "torneo_iniziato": False,
-    "setup_mode": None,
-    "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
-    "torneo_finito": False,
-    "edited_df_squadre": pd.DataFrame(),
-    "gioc_info": {}
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-# -------------------------
 # Header grafico
 # -------------------------
 st.markdown(f"""
@@ -342,7 +362,7 @@ if st.session_state.setup_mode == "carica_db":
         opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
         if st.button("Carica Torneo Selezionato 📥"):
             if carica_torneo_da_db(opzione_scelta):
-                st.toast("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
+                st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
                 st.session_state.torneo_finito = False
                 st.rerun()
     else:
@@ -411,7 +431,7 @@ if st.session_state.setup_mode == "nuovo":
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown("### Modifica i nomi delle squadre e il potenziale 📝")
-        st.toast("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
+        st.info("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
         
         if 'gioc_info' not in st.session_state:
             st.session_state['gioc_info'] = {}
@@ -476,7 +496,7 @@ if st.session_state.setup_mode == "nuovo":
                 precedenti = set()
                 df_turno = genera_accoppiamenti(classifica_iniziale.reset_index(), precedenti)
                 df_turno["Turno"] = st.session_state.turno_attivo
-                st.session_state.df_torneo = df_turno
+                st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno], ignore_index=True)
                 st.session_state.setup_mode = None
                 init_results_temp_from_df(st.session_state.df_torneo)
                 st.rerun()
@@ -509,7 +529,7 @@ with st.sidebar:
             st.session_state.risultati_temp = {}
             st.session_state.nuovo_torneo_step = 1
             st.session_state.torneo_finito = False
-            st.toast("✅ Torneo terminato. Dati resettati.")
+            st.success("✅ Torneo terminato. Dati resettati.")
             st.rerun()
 
 # -------------------------
@@ -547,7 +567,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
                     st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
                     st.session_state.risultati_temp[key_val] = True
-                    st.toast("✅ Risultato validato!")
+                    st.success("✅ Risultato validato!")
                     st.rerun()
 
     st.markdown("---")
