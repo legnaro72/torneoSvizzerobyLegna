@@ -3,11 +3,14 @@ import pandas as pd
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
+# Dati di connessione a MongoDB forniti dall'utente
+# Utilizziamo un solo URI visto che puntano tutti allo stesso cluster
+MONGO_URI = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
+
 # Connessione a MongoDB
 try:
-    # La stringa di connessione è una variabile segreta in Streamlit Cloud
-    MONGO_URI = st.secrets["MONGO_URI"]
     client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
+    # Invia un ping al server per confermare la connessione
     client.admin.command('ping')
     st.sidebar.success("✅ Connessione a MongoDB riuscita!")
 except Exception as e:
