@@ -599,23 +599,15 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
 # Esportazione
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    df_torneo_csv = st.session_state.df_torneo.to_csv(index=False)
-    st.sidebar.download_button(
-        label="⬇️ Esporta torneo in CSV",
-        data=df_torneo_csv,
-        file_name=f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        mime="text/csv"
-    )
+    pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+    file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     
-    if st.sidebar.button("⬇️ Esporta torneo in PDF"):
-        pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
-        file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        st.sidebar.download_button(
-            label="📄 Download PDF torneo",
-            data=pdf_bytes,
-            file_name=file_name_pdf,
-            mime="application/pdf"
-        )
+    st.sidebar.download_button(
+        label="⬇️ Esporta torneo in PDF",
+        data=pdf_bytes,
+        file_name=file_name_pdf,
+        mime="application/pdf"
+    )
         
 # -------------------------
 # Banner vincitore
