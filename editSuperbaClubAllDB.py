@@ -40,7 +40,9 @@ def carica_tornei_all_italiana():
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
         return df.sort_values(by="Torneo").reset_index(drop=True)
-    return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+    else:
+        # Spostato il return del DataFrame vuoto qui
+        return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
 
 def salva_tornei_all_italiana(df):
     db_tornei = client["TorneiSubbuteo"]
@@ -57,7 +59,9 @@ def carica_tornei_svizzeri():
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
         return df.sort_values(by="Torneo").reset_index(drop=True)
-    return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+    else:
+        # Spostato il return del DataFrame vuoto qui
+        return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
 
 def salva_tornei_svizzeri(df):
     db_tornei = client["TorneiSubbuteo"]
