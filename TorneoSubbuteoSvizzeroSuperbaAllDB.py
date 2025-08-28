@@ -429,7 +429,7 @@ if st.session_state.setup_mode == "nuovo":
                 "Giocatore": st.column_config.TextColumn(
                     "Giocatore",
                     help="Nome del giocatore",
-                    disabled=True # Rende il nome del giocatore non modificabile
+                    disabled=True 
                 ),
                 "Squadra": st.column_config.TextColumn(
                     "Squadra",
