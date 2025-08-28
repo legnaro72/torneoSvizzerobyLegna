@@ -284,7 +284,8 @@ for key, default in {
     "squadre_data": [],
     "torneo_iniziato": False,
     "setup_mode": None,
-    "nome_torneo": "Torneo Subbuteo - Sistema Svizzero"
+    "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
+    "torneo_finito": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -314,6 +315,7 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
         )
         if st.button("Carica torneo (MongoDB)", key="btn_carica"):
             st.session_state.setup_mode = "carica_db"
+            st.session_state.torneo_finito = False
             st.rerun()
     with c2:
         st.markdown(
@@ -328,6 +330,7 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
             st.session_state.nuovo_torneo_step = 0
             st.session_state.giocatori_scelti = []
             st.session_state.club_scelto = "Superba"
+            st.session_state.torneo_finito = False
             st.rerun()
 
     st.markdown("---")
@@ -343,6 +346,7 @@ if st.session_state.setup_mode == "carica_db":
         if st.button("Carica Torneo Selezionato"):
             if carica_torneo_da_db(opzione_scelta):
                 st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
+                st.session_state.torneo_finito = False
                 st.rerun()
     else:
         st.warning("⚠️ Nessun torneo trovato nel database.")
@@ -377,6 +381,7 @@ if st.session_state.setup_mode == "carica_csv":
             init_results_temp_from_df(st.session_state.df_torneo)
             st.session_state.torneo_iniziato = True
             st.session_state.setup_mode = None
+            st.session_state.torneo_finito = False
             st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
             st.rerun()
 
@@ -489,7 +494,7 @@ with st.sidebar:
 # -------------------------
 # Interfaccia Utente Torneo
 # -------------------------
-if st.session_state.torneo_iniziato:
+if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
     st.markdown(f"### Turno {st.session_state.turno_attivo}")
     df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
     
@@ -541,14 +546,20 @@ if st.session_state.torneo_iniziato:
     with col_next:
         st.subheader("Prossimo Turno")
         if tutte_validate:
-            if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
-                st.session_state.turno_attivo += 1
-                precedenti = set(zip(st.session_state.df_torneo['Casa'], st.session_state.df_torneo['Ospite'])) | set(zip(st.session_state.df_torneo['Ospite'], st.session_state.df_torneo['Casa']))
-                df_turno_prossimo = genera_accoppiamenti(classifica_attuale, precedenti)
-                df_turno_prossimo["Turno"] = st.session_state.turno_attivo
-                st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
-                st.session_state.risultati_temp = {}
-                init_results_temp_from_df(df_turno_prossimo)
+            precedenti = set(zip(st.session_state.df_torneo['Casa'], st.session_state.df_torneo['Ospite'])) | set(zip(st.session_state.df_torneo['Ospite'], st.session_state.df_torneo['Casa']))
+            df_turno_prossimo = genera_accoppiamenti(classifica_attuale, precedenti)
+
+            if not df_turno_prossimo.empty:
+                if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
+                    st.session_state.turno_attivo += 1
+                    df_turno_prossimo["Turno"] = st.session_state.turno_attivo
+                    st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
+                    st.session_state.risultati_temp = {}
+                    init_results_temp_from_df(df_turno_prossimo)
+                    st.rerun()
+            else:
+                st.info("Non ci sono più accoppiamenti possibili. Il torneo è terminato.")
+                st.session_state.torneo_finito = True
                 st.rerun()
         else:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
@@ -578,24 +589,23 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
 # -------------------------
 # Banner vincitore
 # -------------------------
-if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    tutte_validate = st.session_state.df_torneo['Validata'].all()
+if st.session_state.torneo_finito:
+    st.subheader("Classifica Finale")
+    df_class = aggiorna_classifica(st.session_state.df_torneo)
+    if not df_class.empty:
+        st.dataframe(df_class, hide_index=True, use_container_width=True)
+        vincitore = df_class.iloc[0]['Squadra']
 
-    if tutte_validate:
-        df_class = aggiorna_classifica(st.session_state.df_torneo)
-        if not df_class.empty:
-            vincitore = df_class.iloc[0]['Squadra']
-
-            st.markdown(
-                f"""
-                <div style='background:linear-gradient(90deg, gold, orange); 
-                             padding:20px; 
-                             border-radius:12px; 
-                             text-align:center; 
-                             color:black; 
-                             font-size:28px; 
-                             font-weight:bold;
-                             margin-top:20px;'>
-                    🏆 Il vincitore del torneo {st.session_state.nome_torneo} è {vincitore}! 🎉
-                 </div>
-                 """, unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style='background:linear-gradient(90deg, gold, orange); 
+                         padding:20px; 
+                         border-radius:12px; 
+                         text-align:center; 
+                         color:black; 
+                         font-size:28px; 
+                         font-weight:bold;
+                         margin-top:20px;'>
+                🏆 Il vincitore del torneo {st.session_state.nome_torneo} è {vincitore}! 🎉
+             </div>
+             """, unsafe_allow_html=True)
