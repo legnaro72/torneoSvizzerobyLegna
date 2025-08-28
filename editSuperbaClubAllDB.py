@@ -33,6 +33,7 @@ def salva_dati_su_mongo(df):
 
 # --- Sezione per la gestione dei tornei ---
 def carica_tornei_all_italiana():
+    """Carica tutti i tornei all'italiana dalla collezione PierCrew."""
     db_tornei = client["TorneiSubbuteo"]
     collection_tornei = db_tornei["PierCrew"]
     data = list(collection_tornei.find())
@@ -41,17 +42,10 @@ def carica_tornei_all_italiana():
         df = df.drop(columns=["_id"], errors="ignore")
         return df.sort_values(by="Torneo").reset_index(drop=True)
     else:
-        # Spostato il return del DataFrame vuoto qui
         return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
 
-def salva_tornei_all_italiana(df):
-    db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
-    collection_tornei.delete_many({})
-    collection_tornei.insert_many(df.to_dict('records'))
-    st.success("Dati dei tornei all'italiana salvati con successo!")
-
 def carica_tornei_svizzeri():
+    """Carica tutti i tornei svizzeri dalla collezione PierCrewSvizzero."""
     db_tornei = client["TorneiSubbuteo"]
     collection_tornei = db_tornei["PierCrewSvizzero"]
     data = list(collection_tornei.find())
@@ -60,8 +54,14 @@ def carica_tornei_svizzeri():
         df = df.drop(columns=["_id"], errors="ignore")
         return df.sort_values(by="Torneo").reset_index(drop=True)
     else:
-        # Spostato il return del DataFrame vuoto qui
         return pd.DataFrame(columns=["Torneo", "Data", "Vincitore"])
+
+def salva_tornei_all_italiana(df):
+    db_tornei = client["TorneiSubbuteo"]
+    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei.delete_many({})
+    collection_tornei.insert_many(df.to_dict('records'))
+    st.success("Dati dei tornei all'italiana salvati con successo!")
 
 def salva_tornei_svizzeri(df):
     db_tornei = client["TorneiSubbuteo"]
