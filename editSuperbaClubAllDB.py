@@ -135,7 +135,6 @@ def delete_torneo_italiana(selected_tornei):
         collection_tornei.delete_one({"Torneo": torneo})
         st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
         st.success(f"Torneo '{torneo}' eliminato!")
-    # Non è necessario chiamare salva_tornei, poiché ogni cancellazione è gestita singolarmente.
     st.rerun()
 
 def delete_torneo_svizzero(selected_tornei):
@@ -145,7 +144,6 @@ def delete_torneo_svizzero(selected_tornei):
         collection_tornei.delete_one({"Torneo": torneo})
         st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
         st.success(f"Torneo '{torneo}' eliminato!")
-    # Non è necessario chiamare salva_tornei, poiché ogni cancellazione è gestita singolarmente.
     st.rerun()
     
 # Nuove funzioni per la cancellazione totale
@@ -220,7 +218,6 @@ if st.session_state.edit_index is None:
     st.subheader("Tornei all'italiana")
     df_tornei_italiana = st.session_state.df_tornei_italiana.copy()
     if not df_tornei_italiana.empty:
-        st.dataframe(df_tornei_italiana, use_container_width=True)
         tornei = df_tornei_italiana["Torneo"].tolist()
         selected_tornei_italiana = st.multiselect("Seleziona tornei all'italiana da eliminare", options=tornei, key="del_italiana_select")
         
@@ -236,7 +233,6 @@ if st.session_state.edit_index is None:
     st.subheader("Tornei svizzeri")
     df_tornei_svizzeri = st.session_state.df_tornei_svizzeri.copy()
     if not df_tornei_svizzeri.empty:
-        st.dataframe(df_tornei_svizzeri, use_container_width=True)
         tornei_svizzeri = df_tornei_svizzeri["Torneo"].tolist()
         selected_tornei_svizzeri = st.multiselect("Seleziona tornei svizzeri da eliminare", options=tornei_svizzeri, key="del_svizzero_select")
         
