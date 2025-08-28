@@ -127,17 +127,25 @@ def delete_player(idx, selected_player):
     salva_dati_su_mongo(st.session_state.df_giocatori)
     st.rerun()
 
-# Funzioni di eliminazione per i tornei
-def delete_torneo_italiana(idx, selected_torneo):
-    st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana.drop(idx).reset_index(drop=True)
-    st.success(f"Torneo '{selected_torneo}' eliminato!")
-    salva_tornei_all_italiana(st.session_state.df_tornei_italiana)
+# Funzioni di eliminazione per i tornei, ora supportano liste
+def delete_torneo_italiana(selected_tornei):
+    db_tornei = client_italiana["TorneiSubbuteo"]
+    collection_tornei = db_tornei["Superba"]
+    for torneo in selected_tornei:
+        collection_tornei.delete_one({"Torneo": torneo})
+        st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
+        st.success(f"Torneo '{torneo}' eliminato!")
+    # Non è necessario chiamare salva_tornei, poiché ogni cancellazione è gestita singolarmente.
     st.rerun()
 
-def delete_torneo_svizzero(idx, selected_torneo):
-    st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri.drop(idx).reset_index(drop=True)
-    st.success(f"Torneo '{selected_torneo}' eliminato!")
-    salva_tornei_svizzeri(st.session_state.df_tornei_svizzeri)
+def delete_torneo_svizzero(selected_tornei):
+    db_tornei = client_svizzera["TorneiSubbuteo"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
+    for torneo in selected_tornei:
+        collection_tornei.delete_one({"Torneo": torneo})
+        st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
+        st.success(f"Torneo '{torneo}' eliminato!")
+    # Non è necessario chiamare salva_tornei, poiché ogni cancellazione è gestita singolarmente.
     st.rerun()
     
 # Nuove funzioni per la cancellazione totale
@@ -214,11 +222,10 @@ if st.session_state.edit_index is None:
     if not df_tornei_italiana.empty:
         st.dataframe(df_tornei_italiana, use_container_width=True)
         tornei = df_tornei_italiana["Torneo"].tolist()
-        selected_torneo_italiana = st.selectbox("Seleziona torneo all'italiana da eliminare", options=[""] + tornei, key="del_italiana_select")
+        selected_tornei_italiana = st.multiselect("Seleziona tornei all'italiana da eliminare", options=tornei, key="del_italiana_select")
         
-        if selected_torneo_italiana:
-            idx_italiana = df_tornei_italiana.index[df_tornei_italiana["Torneo"] == selected_torneo_italiana][0]
-            st.button("🗑️ Elimina Torneo selezionato", on_click=delete_torneo_italiana, args=(idx_italiana, selected_torneo_italiana), key="del_italiana_btn")
+        if selected_tornei_italiana:
+            st.button("🗑️ Elimina Tornei selezionati", on_click=delete_torneo_italiana, args=(selected_tornei_italiana,), key="del_italiana_btn")
     else:
         st.info("Nessun torneo all'italiana trovato.")
 
@@ -231,11 +238,10 @@ if st.session_state.edit_index is None:
     if not df_tornei_svizzeri.empty:
         st.dataframe(df_tornei_svizzeri, use_container_width=True)
         tornei_svizzeri = df_tornei_svizzeri["Torneo"].tolist()
-        selected_torneo_svizzero = st.selectbox("Seleziona torneo svizzero da eliminare", options=[""] + tornei_svizzeri, key="del_svizzero_select")
+        selected_tornei_svizzeri = st.multiselect("Seleziona tornei svizzeri da eliminare", options=tornei_svizzeri, key="del_svizzero_select")
         
-        if selected_torneo_svizzero:
-            idx_svizzero = df_tornei_svizzeri.index[df_tornei_svizzeri["Torneo"] == selected_torneo_svizzero][0]
-            st.button("🗑️ Elimina Torneo Svizzero selezionato", on_click=delete_torneo_svizzero, args=(idx_svizzero, selected_torneo_svizzero), key="del_svizzero_btn")
+        if selected_tornei_svizzeri:
+            st.button("🗑️ Elimina Tornei Svizzeri selezionati", on_click=delete_torneo_svizzero, args=(selected_tornei_svizzeri,), key="del_svizzero_btn")
     else:
         st.info("Nessun torneo svizzero trovato.")
 
