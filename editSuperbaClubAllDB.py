@@ -41,34 +41,14 @@ def salva_dati_su_mongo(df):
     collection_players.insert_many(df.to_dict('records'))
 
 # --- Sezione per la gestione dei tornei ---
-# Modifica la funzione carica_tornei_all_italiana
 def carica_tornei_all_italiana():
     """Carica solo i nomi dei tornei all'italiana dalla collezione Superba."""
     db_tornei = client_italiana["TorneiSubbuteo"]
     collection_tornei = db_tornei["Superba"]
-    # Modifica la query per usare 'nome_torneo'
     data = list(collection_tornei.find({}, {"nome_torneo": 1}))
     if data:
         df = pd.DataFrame(data)
         df = df.drop(columns=["_id"], errors="ignore")
-        # Rinomina la colonna 'nome_torneo' in 'Torneo'
-        if "nome_torneo" in df.columns:
-            df.rename(columns={"nome_torneo": "Torneo"}, inplace=True)
-            return df.sort_values(by="Torneo").reset_index(drop=True)
-    return pd.DataFrame(columns=["Torneo"])
-
-
-# Modifica la funzione carica_tornei_svizzeri
-def carica_tornei_svizzeri():
-    """Carica solo i nomi dei tornei svizzeri dalla collezione SuperbaSvizzero."""
-    db_tornei = client_svizzera["TorneiSubbuteo"]
-    collection_tornei = db_tornei["SuperbaSvizzero"]
-    # Modifica la query per usare 'nome_torneo'
-    data = list(collection_tornei.find({}, {"nome_torneo": 1}))
-    if data:
-        df = pd.DataFrame(data)
-        df = df.drop(columns=["_id"], errors="ignore")
-        # Rinomina la colonna 'nome_torneo' in 'Torneo'
         if "nome_torneo" in df.columns:
             df.rename(columns={"nome_torneo": "Torneo"}, inplace=True)
             return df.sort_values(by="Torneo").reset_index(drop=True)
@@ -80,6 +60,19 @@ def salva_tornei_all_italiana(df):
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
     st.success("Dati dei tornei all'italiana salvati con successo!")
+
+def carica_tornei_svizzeri():
+    """Carica solo i nomi dei tornei svizzeri dalla collezione SuperbaSvizzero."""
+    db_tornei = client_svizzera["TorneiSubbuteo"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
+    data = list(collection_tornei.find({}, {"nome_torneo": 1}))
+    if data:
+        df = pd.DataFrame(data)
+        df = df.drop(columns=["_id"], errors="ignore")
+        if "nome_torneo" in df.columns:
+            df.rename(columns={"nome_torneo": "Torneo"}, inplace=True)
+            return df.sort_values(by="Torneo").reset_index(drop=True)
+    return pd.DataFrame(columns=["Torneo"])
 
 def salva_tornei_svizzeri(df):
     db_tornei = client_svizzera["TorneiSubbuteo"]
@@ -141,7 +134,7 @@ def delete_torneo_italiana(selected_tornei):
     db_tornei = client_italiana["TorneiSubbuteo"]
     collection_tornei = db_tornei["Superba"]
     for torneo in selected_tornei:
-        collection_tornei.delete_one({"Torneo": torneo})
+        collection_tornei.delete_one({"nome_torneo": torneo})
         st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
         st.success(f"Torneo '{torneo}' eliminato!")
     st.rerun()
@@ -150,7 +143,7 @@ def delete_torneo_svizzero(selected_tornei):
     db_tornei = client_svizzera["TorneiSubbuteo"]
     collection_tornei = db_tornei["SuperbaSvizzero"]
     for torneo in selected_tornei:
-        collection_tornei.delete_one({"Torneo": torneo})
+        collection_tornei.delete_one({"nome_torneo": torneo})
         st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
         st.success(f"Torneo '{torneo}' eliminato!")
     st.rerun()
@@ -227,6 +220,7 @@ if st.session_state.edit_index is None:
     st.subheader("Tornei all'italiana")
     df_tornei_italiana = st.session_state.df_tornei_italiana.copy()
     if not df_tornei_italiana.empty:
+        st.dataframe(df_tornei_italiana[["Torneo"]], use_container_width=True)
         tornei = df_tornei_italiana["Torneo"].tolist()
         selected_tornei_italiana = st.multiselect("Seleziona tornei all'italiana da eliminare", options=tornei, key="del_italiana_select")
         
@@ -242,6 +236,7 @@ if st.session_state.edit_index is None:
     st.subheader("Tornei svizzeri")
     df_tornei_svizzeri = st.session_state.df_tornei_svizzeri.copy()
     if not df_tornei_svizzeri.empty:
+        st.dataframe(df_tornei_svizzeri[["Torneo"]], use_container_width=True)
         tornei_svizzeri = df_tornei_svizzeri["Torneo"].tolist()
         selected_tornei_svizzeri = st.multiselect("Seleziona tornei svizzeri da eliminare", options=tornei_svizzeri, key="del_svizzero_select")
         
