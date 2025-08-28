@@ -247,15 +247,6 @@ def genera_accoppiamenti(classifica, precedenti):
     df = pd.DataFrame([{"Casa": c, "Ospite": o, "GolCasa": 0, "GolOspite": 0, "Validata": False} for c, o in accoppiamenti])
     return df
 
-def carica_csv_robusto_da_file(file_buffer):
-    try:
-        content = file_buffer.read()
-        text = content.decode('latin1')
-        return pd.read_csv(io.StringIO(text))
-    except Exception as e:
-        st.warning(f"Errore caricamento CSV da file: {e}")
-        return pd.DataFrame()
-
 def init_results_temp_from_df(df):
     for _, row in df.iterrows():
         T = row.get('Turno', 1)
@@ -305,7 +296,7 @@ st.markdown(f"""
 # Se torneo non è iniziato e non è stato ancora selezionato un setup
 # -------------------------
 if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
-    st.markdown("### Scegli azione")
+    st.markdown("### Scegli azione 📝")
     c1, c2 = st.columns([1,1])
     with c1:
         st.markdown(
@@ -315,7 +306,7 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
                 </div>""",
             unsafe_allow_html=True,
         )
-        if st.button("Carica torneo (MongoDB)", key="btn_carica"):
+        if st.button("Carica torneo (MongoDB) 📂", key="btn_carica"):
             st.session_state.setup_mode = "carica_db"
             st.session_state.torneo_finito = False
             st.rerun()
@@ -327,7 +318,7 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
                 </div>""",
             unsafe_allow_html=True,
         )
-        if st.button("Nuovo torneo", key="btn_nuovo"):
+        if st.button("Nuovo torneo ✨", key="btn_nuovo"):
             st.session_state.setup_mode = "nuovo"
             st.session_state.nuovo_torneo_step = 0
             st.session_state.giocatori_selezionati_db = []
@@ -349,14 +340,14 @@ if st.session_state.setup_mode == "carica_db":
     tornei_disponibili = carica_nomi_tornei_da_db()
     if tornei_disponibili:
         opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
-        if st.button("Carica Torneo Selezionato"):
+        if st.button("Carica Torneo Selezionato 📥"):
             if carica_torneo_da_db(opzione_scelta):
                 st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
                 st.session_state.torneo_finito = False
                 st.rerun()
     else:
         st.warning("⚠️ Nessun torneo trovato nel database.")
-    if st.button("Indietro"):
+    if st.button("↩️ Indietro"):
         st.session_state.setup_mode = None
         st.rerun()
 
@@ -364,7 +355,7 @@ if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
     if st.session_state.nuovo_torneo_step == 0:
         suffisso = st.text_input("Dai un nome al tuo torneo", value="", placeholder="Es. 'Campionato Invernale'")
-        if st.button("Prossimo passo", key="next_step_0"):
+        if st.button("Prossimo passo ➡️", key="next_step_0"):
             st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero - {suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
             st.session_state.nuovo_torneo_step = 1
             st.rerun()
@@ -394,9 +385,9 @@ if st.session_state.setup_mode == "nuovo":
 
         st.session_state.giocatori_totali = st.session_state.giocatori_selezionati_db + [p for p in st.session_state.giocatori_ospiti if p.strip()]
         
-        if st.button("Accetta giocatori", key="next_step_1"):
+        if st.button("Accetta giocatori ✅", key="next_step_1"):
             if len(st.session_state.giocatori_totali) != num_squadre:
-                st.error(f"Il numero di giocatori selezionati ({len(st.session_state.giocatori_totali)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
+                st.error(f"❌ Il numero di giocatori selezionati ({len(st.session_state.giocatori_totali)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
             else:
                 data_squadre = []
                 giocatori_db_df = carica_giocatori_da_db()
@@ -413,13 +404,13 @@ if st.session_state.setup_mode == "nuovo":
                 st.session_state.nuovo_torneo_step = 2
                 st.rerun()
 
-        if st.button("Indietro"):
+        if st.button("↩️ Indietro"):
             st.session_state.nuovo_torneo_step = 0
             st.rerun()
 
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
-        st.markdown("### Modifica i nomi delle squadre e il potenziale")
+        st.markdown("### Modifica i nomi delle squadre e il potenziale 📝")
         st.info("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
         
         if 'gioc_info' not in st.session_state:
@@ -443,11 +434,10 @@ if st.session_state.setup_mode == "nuovo":
                     key=f"squadra_input_{gioc}"
                 )
                 
-                # Modifica della scala del potenziale
                 potenziale_nuovo = st.slider(
                     f"Potenziale",
                     min_value=0,
-                    max_value=10, # Modificato da 100 a 10
+                    max_value=10,
                     value=int(st.session_state['gioc_info'][gioc]["Potenziale"]),
                     key=f"potenziale_slider_{gioc}"
                 )
@@ -457,7 +447,7 @@ if st.session_state.setup_mode == "nuovo":
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Genera calendario", type="primary"):
+            if st.button("Genera calendario ▶️", type="primary"):
                 df_squadre_aggiornato = []
                 for gioc, info in st.session_state['gioc_info'].items():
                     df_squadre_aggiornato.append({
@@ -492,7 +482,7 @@ if st.session_state.setup_mode == "nuovo":
                 st.rerun()
 
         with col2:
-            if st.button("Indietro"):
+            if st.button("↩️ Indietro"):
                 st.session_state.nuovo_torneo_step = 1
                 st.rerun()
 
@@ -510,19 +500,6 @@ with st.sidebar:
                 salva_torneo_su_db()
         st.markdown("---")
         
-        # Corretta implementazione dell'esportazione PDF
-        if not st.session_state.df_torneo.empty:
-            pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
-            file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            st.download_button(
-                label="⬇️ Esporta torneo in PDF",
-                data=pdf_bytes,
-                file_name=file_name_pdf,
-                mime="application/pdf",
-                use_container_width=True
-            )
-        st.markdown("---")
-
         if st.button("🏁 Termina Torneo"):
             st.session_state.torneo_iniziato = False
             st.session_state.setup_mode = None
@@ -564,7 +541,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                 with c_score2:
                     st.session_state.risultati_temp[key_go] = st.number_input(f"Gol {ospite}", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
                 
-                if st.button("Valida Risultato", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False)):
+                if st.button("Valida Risultato ✅", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False)):
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
@@ -580,7 +557,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
     
     col_class, col_next = st.columns([2, 1])
     with col_class:
-        st.subheader("Classifica")
+        st.subheader("Classifica 🏆")
         classifica_attuale = aggiorna_classifica(st.session_state.df_torneo)
         if not classifica_attuale.empty:
             st.dataframe(classifica_attuale, hide_index=True, use_container_width=True)
@@ -588,7 +565,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
             st.info("Nessuna partita giocata per aggiornare la classifica.")
             
     with col_next:
-        st.subheader("Prossimo Turno")
+        st.subheader("Prossimo Turno ➡️")
         if tutte_validate:
             precedenti = set(zip(st.session_state.df_torneo['Casa'], st.session_state.df_torneo['Ospite'])) | set(zip(st.session_state.df_torneo['Ospite'], st.session_state.df_torneo['Casa']))
             df_turno_prossimo = genera_accoppiamenti(classifica_attuale, precedenti)
@@ -610,10 +587,24 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
 
 # -------------------------
+# Esportazione
+# -------------------------
+if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
+    pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+    file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    
+    st.sidebar.download_button(
+        label="⬇️ Esporta torneo in PDF",
+        data=pdf_bytes,
+        file_name=file_name_pdf,
+        mime="application/pdf"
+    )
+        
+# -------------------------
 # Banner vincitore
 # -------------------------
 if st.session_state.torneo_finito:
-    st.subheader("Classifica Finale")
+    st.subheader("Classifica Finale 🥇")
     df_class = aggiorna_classifica(st.session_state.df_torneo)
     if not df_class.empty:
         st.dataframe(df_class, hide_index=True, use_container_width=True)
