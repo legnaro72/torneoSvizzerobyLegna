@@ -33,9 +33,9 @@ def salva_dati_su_mongo(df):
 
 # --- Sezione per la gestione dei tornei ---
 def carica_tornei_all_italiana():
-    """Carica solo i nomi dei tornei all'italiana dalla collezione PierCrew."""
+    """Carica solo i nomi dei tornei all'italiana dalla collezione Superba."""
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei = db_tornei["Superba"]
     # Richiede solo il campo 'Torneo' per una visualizzazione semplificata
     data = list(collection_tornei.find({}, {"Torneo": 1}))
     if data:
@@ -48,15 +48,15 @@ def carica_tornei_all_italiana():
 
 def salva_tornei_all_italiana(df):
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei = db_tornei["Superba"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
     st.success("Dati dei tornei all'italiana salvati con successo!")
 
 def carica_tornei_svizzeri():
-    """Carica solo i nomi dei tornei svizzeri dalla collezione PierCrewSvizzero."""
+    """Carica solo i nomi dei tornei svizzeri dalla collezione SuperbaSvizzero."""
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
     # Richiede solo il campo 'Torneo' per una visualizzazione semplificata
     data = list(collection_tornei.find({}, {"Torneo": 1}))
     if data:
@@ -69,7 +69,7 @@ def carica_tornei_svizzeri():
 
 def salva_tornei_svizzeri(df):
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
     collection_tornei.delete_many({})
     collection_tornei.insert_many(df.to_dict('records'))
     st.success("Dati dei tornei svizzeri salvati con successo!")
@@ -138,7 +138,7 @@ def delete_torneo_svizzero(idx, selected_torneo):
 # Nuove funzioni per la cancellazione totale
 def delete_all_tornei_italiana():
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
+    collection_tornei = db_tornei["Superba"]
     collection_tornei.delete_many({})
     st.session_state.df_tornei_italiana = carica_tornei_all_italiana() # Ricarica il dataframe vuoto
     st.success("✅ Tutti i tornei all'italiana sono stati eliminati!")
@@ -146,7 +146,7 @@ def delete_all_tornei_italiana():
 
 def delete_all_tornei_svizzeri():
     db_tornei = client["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
+    collection_tornei = db_tornei["SuperbaSvizzero"]
     collection_tornei.delete_many({})
     st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri() # Ricarica il dataframe vuoto
     st.success("✅ Tutti i tornei svizzeri sono stati eliminati!")
@@ -168,7 +168,7 @@ if st.session_state.edit_index is None:
     with col1:
         st.button("➕ Aggiungi nuovo giocatore", on_click=add_player)
     with col2:
-        if not df.empty:
+        if not df.empty and "Giocatore" in df.columns:
             giocatori = df["Giocatore"].tolist()
             selected = st.selectbox("Seleziona giocatore per Modifica o Elimina", options=[""] + giocatori)
 
