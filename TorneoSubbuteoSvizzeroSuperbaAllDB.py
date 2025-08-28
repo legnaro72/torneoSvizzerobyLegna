@@ -15,7 +15,7 @@ st.set_page_config(page_title="⚽ Torneo Subbuteo - Sistema Svizzero", layout="
 
 players_collection = None
 tournaments_collection = None
-st.info("Tentativo di connessione a MongoDB...")
+st.toast("Tentativo di connessione a MongoDB...")
 try:
     MONGO_URI=st.secrets["MONGO_URI"]
     server_api = ServerApi('1')
@@ -31,7 +31,7 @@ try:
     tournaments_collection = db_tournaments.get_collection("SuperbaSvizzero")
     _ = tournaments_collection.find_one()
 
-    st.success("✅ Connessione a MongoDB Atlas riuscita.")
+    st.toast("✅ Connessione a MongoDB Atlas riuscita.")
 except Exception as e:
     st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
 
@@ -64,11 +64,11 @@ def salva_torneo_su_db():
                 {"_id": existing_doc["_id"]},
                 {"$set": torneo_data}
             )
-            st.success(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
+            st.toast(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
         else:
             # Crea un nuovo documento
             tournaments_collection.insert_one(torneo_data)
-            st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+            st.toast(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
@@ -116,7 +116,7 @@ def carica_giocatori_da_db():
                 st.warning("⚠️ La collection 'superba_players' è vuota o non esiste. Non è stato caricato alcun giocatore.")
                 return pd.DataFrame()
             else:
-                st.info(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
+                st.toast(f"✅ Trovati {count} giocatori nel database. Caricamento in corso...")
             
             df = pd.DataFrame(list(players_collection.find()))
             
@@ -342,7 +342,7 @@ if st.session_state.setup_mode == "carica_db":
         opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
         if st.button("Carica Torneo Selezionato 📥"):
             if carica_torneo_da_db(opzione_scelta):
-                st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
+                st.toast("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
                 st.session_state.torneo_finito = False
                 st.rerun()
     else:
@@ -411,7 +411,7 @@ if st.session_state.setup_mode == "nuovo":
     elif st.session_state.nuovo_torneo_step == 2:
         st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown("### Modifica i nomi delle squadre e il potenziale 📝")
-        st.info("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
+        st.toast("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
         
         if 'gioc_info' not in st.session_state:
             st.session_state['gioc_info'] = {}
@@ -509,7 +509,7 @@ with st.sidebar:
             st.session_state.risultati_temp = {}
             st.session_state.nuovo_torneo_step = 1
             st.session_state.torneo_finito = False
-            st.success("✅ Torneo terminato. Dati resettati.")
+            st.toast("✅ Torneo terminato. Dati resettati.")
             st.rerun()
 
 # -------------------------
@@ -547,7 +547,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
                     st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
                     st.session_state.risultati_temp[key_val] = True
-                    st.success("✅ Risultato validato!")
+                    st.toast("✅ Risultato validato!")
                     st.rerun()
 
     st.markdown("---")
