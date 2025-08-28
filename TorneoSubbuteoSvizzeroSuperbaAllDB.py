@@ -137,7 +137,6 @@ def carica_giocatori_da_db():
 
 
 def esporta_pdf(df_torneo, nome_torneo):
-    #...
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
@@ -379,7 +378,6 @@ if st.session_state.setup_mode == "carica_csv":
             init_results_temp_from_df(st.session_state.df_torneo)
             st.session_state.torneo_iniziato = True
             st.session_state.setup_mode = None
-            st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
             st.rerun()
 
 if st.session_state.setup_mode == "nuovo":
@@ -396,4 +394,208 @@ if st.session_state.setup_mode == "nuovo":
         # Legge i giocatori da MongoDB
         df_gioc = carica_giocatori_da_db()
         st.markdown("**Numero partecipanti** (min 2)")
-        num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_parte...
+        num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
+
+        if not df_gioc.empty:
+            giocatori_df = df_gioc
+            st.session_state.giocatori_scelti = st.multiselect(
+                "Seleziona i giocatori che partecipano al torneo",
+                options=giocatori_df['Giocatore'].tolist(),
+                default=st.session_state.giocatori_scelti,
+            )
+        else:
+            st.warning("⚠️ Impossibile caricare i giocatori dal database. Aggiungi i giocatori manualmente.")
+            if 'giocatori_temp' not in st.session_state:
+                st.session_state.giocatori_temp = [""] * num_squadre
+            for i in range(num_squadre):
+                st.session_state.giocatori_temp[i] = st.text_input(f"Nome Giocatore {i+1}", key=f"manual_player_{i}", value=st.session_state.giocatori_temp[i])
+
+            st.session_state.giocatori_scelti = [p for p in st.session_state.giocatori_temp if p.strip()]
+
+        if st.session_state.giocatori_scelti and st.button("Prossimo passo", key="next_step_1"):
+            if len(st.session_state.giocatori_scelti) < 2:
+                st.error("Devi selezionare almeno 2 giocatori per iniziare il torneo.")
+            else:
+                st.session_state.squadre_data = st.session_state.giocatori_scelti
+                st.session_state.nuovo_torneo_step = 2
+                st.rerun()
+        if st.button("Indietro"):
+            st.session_state.nuovo_torneo_step = 0
+            st.rerun()
+
+    elif st.session_state.nuovo_torneo_step == 2:
+        st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
+        st.markdown(f"**Giocatori selezionati:** {', '.join(st.session_state.squadre_data)}")
+        st.markdown("### Conferma giocatori e inizia torneo")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Inizia Torneo", type="primary"):
+                squadre_shuffled = pd.DataFrame({'Squadra': st.session_state.squadre_data}).sample(frac=1).reset_index(drop=True)
+                st.session_state.df_squadre = squadre_shuffled
+                st.session_state.torneo_iniziato = True
+                st.session_state.turno_attivo = 1
+                
+                classifica_iniziale = pd.DataFrame({
+                    "Squadra": st.session_state.squadre_data,
+                    "Punti": [0] * len(st.session_state.squadre_data),
+                    "G": [0] * len(st.session_state.squadre_data),
+                    "V": [0] * len(st.session_state.squadre_data),
+                    "N": [0] * len(st.session_state.squadre_data),
+                    "P": [0] * len(st.session_state.squadre_data),
+                    "GF": [0] * len(st.session_state.squadre_data),
+                    "GS": [0] * len(st.session_state.squadre_data),
+                    "DR": [0] * len(st.session_state.squadre_data),
+                }).set_index('Squadra')
+
+                precedenti = set()
+                df_turno = genera_accoppiamenti(classifica_iniziale.reset_index(), precedenti)
+                df_turno["Turno"] = st.session_state.turno_attivo
+                st.session_state.df_torneo = df_turno
+                st.session_state.setup_mode = None
+                init_results_temp_from_df(st.session_state.df_torneo)
+                st.rerun()
+
+        with col2:
+            if st.button("Indietro"):
+                st.session_state.nuovo_torneo_step = 1
+                st.rerun()
+
+# -------------------------
+# Sidebar
+# -------------------------
+with st.sidebar:
+    st.header("Opzioni Torneo")
+    if st.session_state.torneo_iniziato:
+        st.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
+
+        st.markdown("---")
+        if tournaments_collection is not None:
+            if st.button("💾 Salva su DB"):
+                salva_torneo_su_db()
+        st.markdown("---")
+        
+        if st.button("🏁 Termina Torneo"):
+            st.session_state.torneo_iniziato = False
+            st.session_state.setup_mode = None
+            st.session_state.df_torneo = pd.DataFrame()
+            st.session_state.df_squadre = pd.DataFrame()
+            st.session_state.turno_attivo = 0
+            st.session_state.risultati_temp = {}
+            st.session_state.nuovo_torneo_step = 1
+            st.success("✅ Torneo terminato. Dati resettati.")
+            st.rerun()
+
+# -------------------------
+# Interfaccia Utente Torneo
+# -------------------------
+if st.session_state.torneo_iniziato:
+    st.markdown(f"### Turno {st.session_state.turno_attivo}")
+    df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
+    
+    col_matches = st.columns(len(df_turno_corrente))
+    
+    for i, riga in df_turno_corrente.iterrows():
+        with col_matches[i]:
+            with st.container(border=True):
+                st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita {i+1}</p>", unsafe_allow_html=True)
+                casa = riga['Casa']
+                ospite = riga['Ospite']
+                key_gc = f"gc_{st.session_state.turno_attivo}_{casa}_{ospite}"
+                key_go = f"go_{st.session_state.turno_attivo}_{casa}_{ospite}"
+                key_val = f"val_{st.session_state.turno_attivo}_{casa}_{ospite}"
+                
+                valida_key = f"valida_{st.session_state.turno_attivo}_{casa}_{ospite}"
+                
+                st.markdown(f"<p style='text-align:center; font-weight:bold;'>{casa} - {ospite}</p>", unsafe_allow_html=True)
+                
+                c_score1, c_score2 = st.columns(2)
+                with c_score1:
+                    st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol {casa}", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
+                with c_score2:
+                    st.session_state.risultati_temp[key_go] = st.number_input(f"Gol {ospite}", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
+                
+                if st.button("Valida Risultato", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False)):
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
+                    st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
+                    st.session_state.risultati_temp[key_val] = True
+                    st.success("✅ Risultato validato!")
+                    st.rerun()
+
+    st.markdown("---")
+    
+    partite_giocate_turno = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo]
+    tutte_validate = partite_giocate_turno['Validata'].all()
+    
+    col_class, col_next = st.columns([2, 1])
+    with col_class:
+        st.subheader("Classifica")
+        classifica_attuale = aggiorna_classifica(st.session_state.df_torneo)
+        if not classifica_attuale.empty:
+            st.dataframe(classifica_attuale, hide_index=True, use_container_width=True)
+        else:
+            st.info("Nessuna partita giocata per aggiornare la classifica.")
+            
+    with col_next:
+        st.subheader("Prossimo Turno")
+        if tutte_validate:
+            if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
+                st.session_state.turno_attivo += 1
+                precedenti = set(zip(st.session_state.df_torneo['Casa'], st.session_state.df_torneo['Ospite'])) | set(zip(st.session_state.df_torneo['Ospite'], st.session_state.df_torneo['Casa']))
+                df_turno_prossimo = genera_accoppiamenti(classifica_attuale, precedenti)
+                df_turno_prossimo["Turno"] = st.session_state.turno_attivo
+                st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
+                st.session_state.risultati_temp = {}
+                init_results_temp_from_df(df_turno_prossimo)
+                st.rerun()
+        else:
+            st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
+
+# -------------------------
+# Esportazione
+# -------------------------
+if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
+    df_torneo_csv = st.session_state.df_torneo.to_csv(index=False)
+    st.sidebar.download_button(
+        label="⬇️ Esporta torneo in CSV",
+        data=df_torneo_csv,
+        file_name=f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+    
+    if st.sidebar.button("⬇️ Esporta torneo in PDF"):
+        pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+        file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        st.sidebar.download_button(
+            label="📄 Download PDF torneo",
+            data=pdf_bytes,
+            file_name=file_name_pdf,
+            mime="application/pdf"
+        )
+        
+# -------------------------
+# Banner vincitore
+# -------------------------
+if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
+    tutte_validate = st.session_state.df_torneo['Validata'].all()
+
+    if tutte_validate:
+        df_class = aggiorna_classifica(st.session_state.df_torneo)
+        if not df_class.empty:
+            vincitore = df_class.iloc[0]['Squadra']
+
+            st.markdown(
+                f"""
+                <div style='background:linear-gradient(90deg, gold, orange); 
+                             padding:20px; 
+                             border-radius:12px; 
+                             text-align:center; 
+                             color:black; 
+                             font-size:28px; 
+                             font-weight:bold;
+                             margin-top:20px;'>
+                    🏆 Il vincitore del torneo {st.session_state.nome_torneo} è {vincitore}! 🎉
+                 </div>
+                 """, unsafe_allow_html=True)
