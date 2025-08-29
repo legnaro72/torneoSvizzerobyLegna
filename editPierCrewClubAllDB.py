@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from pymongo.mongo_client import MongoClient
@@ -95,6 +94,11 @@ if "df_tornei_svizzeri" not in st.session_state:
     st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
 if "edit_index" not in st.session_state:
     st.session_state.edit_index = None
+if "confirm_delete" not in st.session_state:
+    st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
+if "password_check" not in st.session_state:
+    st.session_state.password_check = {"show": False, "password": None, "type": None}
+
 
 # Funzioni per la logica dell'app
 def add_player():
@@ -123,56 +127,115 @@ def save_player(giocatore, squadra, potenziale):
 def modify_player(idx):
     st.session_state.edit_index = idx
 
-def delete_player(idx, selected_player):
-    st.session_state.df_giocatori = st.session_state.df_giocatori.drop(idx).reset_index(drop=True)
-    st.toast(f"Giocatore '{selected_player}' eliminato!")
-    st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
-    salva_dati_su_mongo(st.session_state.df_giocatori)
+def confirm_delete_player(idx, selected_player):
+    st.session_state.confirm_delete = {"type": "player", "data": (idx, selected_player), "password_required": True}
     st.rerun()
 
-# Funzioni di eliminazione per i tornei, ora supportano liste
-def delete_torneo_italiana(selected_tornei):
-    db_tornei = client_italiana["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
-    for torneo in selected_tornei:
-        collection_tornei.delete_one({"nome_torneo": torneo})
-        st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
-        st.toast(f"Torneo '{torneo}' eliminato!")
+def confirm_delete_torneo_italiana(selected_tornei):
+    st.session_state.confirm_delete = {"type": "tornei_ita", "data": selected_tornei, "password_required": True}
     st.rerun()
 
-def delete_torneo_svizzero(selected_tornei):
-    db_tornei = client_svizzera["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
-    for torneo in selected_tornei:
-        collection_tornei.delete_one({"nome_torneo": torneo})
-        st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
-        st.toast(f"Torneo '{torneo}' eliminato!")
+def confirm_delete_torneo_svizzero(selected_tornei):
+    st.session_state.confirm_delete = {"type": "tornei_svizz", "data": selected_tornei, "password_required": True}
     st.rerun()
     
-# Nuove funzioni per la cancellazione totale
-def delete_all_tornei_italiana():
-    db_tornei = client_italiana["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrew"]
-    collection_tornei.delete_many({})
-    st.session_state.df_tornei_italiana = carica_tornei_all_italiana() # Ricarica il dataframe vuoto
-    st.toast("✅ Tutti i tornei all'italiana sono stati eliminati!")
+def confirm_delete_all_tornei_italiana():
+    st.session_state.confirm_delete = {"type": "all_ita", "data": None, "password_required": True}
     st.rerun()
 
-def delete_all_tornei_svizzeri():
-    db_tornei = client_svizzera["TorneiSubbuteo"]
-    collection_tornei = db_tornei["PierCrewSvizzero"]
-    collection_tornei.delete_many({})
-    st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri() # Ricarica il dataframe vuoto
-    st.toast("✅ Tutti i tornei svizzeri sono stati eliminati!")
+def confirm_delete_all_tornei_svizzeri():
+    st.session_state.confirm_delete = {"type": "all_svizz", "data": None, "password_required": True}
     st.rerun()
 
-def delete_all_tornei_all():
-    delete_all_tornei_italiana()
-    delete_all_tornei_svizzeri()
+def confirm_delete_all_tornei_all():
+    st.session_state.confirm_delete = {"type": "all", "data": None, "password_required": True}
+    st.rerun()
 
+def cancel_delete():
+    st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
+    st.session_state.password_check = {"show": False, "password": None, "type": None}
+    st.info("Operazione di eliminazione annullata.")
+    st.rerun()
+
+def process_deletion_with_password(password, deletion_type, data):
+    # Determine password based on deletion type
+    if deletion_type in ["player", "tornei_ita", "tornei_svizz"]:
+        correct_password = "PierCrewPwd"
+    elif deletion_type in ["all_ita", "all_svizz", "all"]:
+        correct_password = "Legnaro72"
+    else:
+        st.error("Tipo di cancellazione non valido.")
+        return
+
+    if password == correct_password:
+        if deletion_type == "player":
+            idx, selected_player = data
+            st.session_state.df_giocatori = st.session_state.df_giocatori.drop(idx).reset_index(drop=True)
+            salva_dati_su_mongo(st.session_state.df_giocatori)
+            st.toast(f"Giocatore '{selected_player}' eliminato!")
+
+        elif deletion_type == "tornei_ita":
+            db_tornei = client_italiana["TorneiSubbuteo"]
+            collection_tornei = db_tornei["PierCrew"]
+            for torneo in data:
+                collection_tornei.delete_one({"nome_torneo": torneo})
+                st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
+                st.toast(f"Torneo '{torneo}' eliminato!")
+
+        elif deletion_type == "tornei_svizz":
+            db_tornei = client_svizzera["TorneiSubbuteo"]
+            collection_tornei = db_tornei["PierCrewSvizzero"]
+            for torneo in data:
+                collection_tornei.delete_one({"nome_torneo": torneo})
+                st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
+                st.toast(f"Torneo '{torneo}' eliminato!")
+
+        elif deletion_type == "all_ita":
+            db_tornei = client_italiana["TorneiSubbuteo"]
+            collection_tornei = db_tornei["PierCrew"]
+            tornei_da_cancellare = [t["nome_torneo"] for t in collection_tornei.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            for torneo in tornei_da_cancellare:
+                collection_tornei.delete_one({"nome_torneo": torneo})
+            st.session_state.df_tornei_italiana = carica_tornei_all_italiana()
+            st.toast("✅ Tutti i tornei all'italiana (esclusi i campionati) sono stati eliminati!")
+
+        elif deletion_type == "all_svizz":
+            db_tornei = client_svizzera["TorneiSubbuteo"]
+            collection_tornei = db_tornei["PierCrewSvizzero"]
+            tornei_da_cancellare = [t["nome_torneo"] for t in collection_tornei.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            for torneo in tornei_da_cancellare:
+                collection_tornei.delete_one({"nome_torneo": torneo})
+            st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
+            st.toast("✅ Tutti i tornei svizzeri (esclusi i campionati) sono stati eliminati!")
+
+        elif deletion_type == "all":
+            # Chiamiamo le funzioni specifiche per applicare il filtro
+            db_tornei_ita = client_italiana["TorneiSubbuteo"]
+            collection_tornei_ita = db_tornei_ita["PierCrew"]
+            tornei_da_cancellare_ita = [t["nome_torneo"] for t in collection_tornei_ita.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            for torneo in tornei_da_cancellare_ita:
+                collection_tornei_ita.delete_one({"nome_torneo": torneo})
+            
+            db_tornei_svizz = client_svizzera["TorneiSubbuteo"]
+            collection_tornei_svizz = db_tornei_svizz["PierCrewSvizzero"]
+            tornei_da_cancellare_svizz = [t["nome_torneo"] for t in collection_tornei_svizz.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            for torneo in tornei_da_cancellare_svizz:
+                collection_tornei_svizz.delete_one({"nome_torneo": torneo})
+            
+            st.session_state.df_tornei_italiana = carica_tornei_all_italiana()
+            st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
+            st.toast("✅ TUTTI i tornei (esclusi i campionati) sono stati eliminati!")
+
+        # Reset state after successful deletion
+        st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
+        st.session_state.password_check = {"show": False, "password": None, "type": None}
+        st.rerun()
+    else:
+        st.error("❌ Password errata. Operazione annullata.")
+        st.session_state.password_check["show"] = True # Keep password field open on error
 
 # Logica di visualizzazione basata sullo stato
-if st.session_state.edit_index is None:
+if st.session_state.edit_index is None and st.session_state.confirm_delete["type"] is None:
     st.header("Gestione Giocatori")
     st.subheader("Lista giocatori")
     df = st.session_state.df_giocatori.copy()
@@ -195,13 +258,13 @@ if st.session_state.edit_index is None:
                 with mod_col:
                     st.button("✏️ Modifica", on_click=modify_player, args=(idx,), key=f"mod_{idx}")
                 with del_col:
-                    st.button("🗑️ Elimina", on_click=delete_player, args=(idx, selected), key=f"del_{idx}")
+                    st.button("🗑️ Elimina", on_click=confirm_delete_player, args=(idx, selected), key=f"del_{idx}")
 
     csv = st.session_state.df_giocatori.to_csv(index=False).encode("utf-8")
     st.download_button(
         "📥 Scarica CSV giocatori aggiornato",
         data=csv,
-        file_name="giocatori_piercrew_modificato.csv",
+        file_name="giocatori_PierCrew_modificato.csv",
         mime="text/csv",
     )
 
@@ -211,11 +274,11 @@ if st.session_state.edit_index is None:
 
     col_del_all_ita, col_del_all_svizz, col_del_all = st.columns(3)
     with col_del_all_ita:
-        st.button("❌ Cancella tutti i tornei all'italiana", on_click=delete_all_tornei_italiana)
+        st.button("❌ Cancella tutti i tornei all'italiana", on_click=confirm_delete_all_tornei_italiana)
     with col_del_all_svizz:
-        st.button("❌ Cancella tutti i tornei svizzeri", on_click=delete_all_tornei_svizzeri)
+        st.button("❌ Cancella tutti i tornei svizzeri", on_click=confirm_delete_all_tornei_svizzeri)
     with col_del_all:
-        st.button("❌ Cancella TUTTI i tornei", on_click=delete_all_tornei_all)
+        st.button("❌ Cancella TUTTI i tornei", on_click=confirm_delete_all_tornei_all)
 
     # Sezione per i tornei all'italiana
     st.subheader("Tornei all'italiana")
@@ -226,7 +289,7 @@ if st.session_state.edit_index is None:
         selected_tornei_italiana = st.multiselect("Seleziona tornei all'italiana da eliminare", options=tornei, key="del_italiana_select")
         
         if selected_tornei_italiana:
-            st.button("🗑️ Elimina Tornei selezionati", on_click=delete_torneo_italiana, args=(selected_tornei_italiana,), key="del_italiana_btn")
+            st.button("🗑️ Elimina Tornei selezionati", on_click=confirm_delete_torneo_italiana, args=(selected_tornei_italiana,), key="del_italiana_btn")
     else:
         st.info("Nessun torneo all'italiana trovato.")
 
@@ -242,12 +305,12 @@ if st.session_state.edit_index is None:
         selected_tornei_svizzeri = st.multiselect("Seleziona tornei svizzeri da eliminare", options=tornei_svizzeri, key="del_svizzero_select")
         
         if selected_tornei_svizzeri:
-            st.button("🗑️ Elimina Tornei Svizzeri selezionati", on_click=delete_torneo_svizzero, args=(selected_tornei_svizzeri,), key="del_svizzero_btn")
+            st.button("🗑️ Elimina Tornei Svizzeri selezionati", on_click=confirm_delete_torneo_svizzero, args=(selected_tornei_svizzeri,), key="del_svizzero_btn")
     else:
         st.info("Nessun torneo svizzero trovato.")
 
 
-else: # Logica di modifica/aggiunta giocatore
+elif st.session_state.edit_index is not None: # Logica di modifica/aggiunta giocatore
     st.header("Gestione Giocatori")
     if st.session_state.edit_index == -1:
         st.subheader("➕ Nuovo giocatore")
@@ -273,3 +336,34 @@ else: # Logica di modifica/aggiunta giocatore
         if st.button("❌ Annulla"):
             st.session_state.edit_index = None
             st.rerun()
+
+elif st.session_state.confirm_delete["type"] is not None:
+    # Confirmation and password logic for deletions
+    deletion_type = st.session_state.confirm_delete["type"]
+
+    if deletion_type == "player":
+        _, selected_player = st.session_state.confirm_delete["data"]
+        st.warning(f"Sei sicuro di voler eliminare il giocatore '{selected_player}'?")
+    elif deletion_type == "tornei_ita":
+        st.warning("Sei sicuro di voler eliminare i tornei all'italiana selezionati?")
+    elif deletion_type == "tornei_svizz":
+        st.warning("Sei sicuro di voler eliminare i tornei svizzeri selezionati?")
+    elif deletion_type == "all_ita":
+        st.warning("Sei sicuro di voler eliminare TUTTI i tornei all'italiana? I tornei che contengono la parola 'campionato' nel nome non verranno eliminati.")
+    elif deletion_type == "all_svizz":
+        st.warning("Sei sicuro di voler eliminare TUTTI i tornei svizzeri? I tornei che contengono la parola 'campionato' nel nome non verranno eliminati.")
+    elif deletion_type == "all":
+        st.warning("Sei sicuro di voler eliminare TUTTI i tornei? I tornei che contengono la parola 'campionato' nel nome non verranno eliminati.")
+
+    col_confirm, col_cancel = st.columns(2)
+    with col_confirm:
+        if st.button("Conferma e procedi"):
+            st.session_state.password_check["show"] = True
+            st.session_state.password_check["type"] = deletion_type
+    with col_cancel:
+        st.button("❌ Annulla", on_click=cancel_delete)
+    
+    if st.session_state.password_check["show"]:
+        password = st.text_input("Inserisci la password per confermare", type="password")
+        if st.button("Conferma Password"):
+            process_deletion_with_password(password, st.session_state.password_check["type"], st.session_state.confirm_delete["data"])
