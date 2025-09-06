@@ -228,8 +228,7 @@ def esporta_pdf(df_torneo, nome_torneo):
             pdf.ln()
     # Linea corretta per risolvere l'errore di tipo
     return bytes(pdf.output(dest="S"))
-
-@st.cache_data
+  
 def aggiorna_classifica(df):
     stats = {}
     for _, r in df.iterrows():
