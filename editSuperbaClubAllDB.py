@@ -367,3 +367,7 @@ elif st.session_state.confirm_delete["type"] is not None:
         password = st.text_input("Inserisci la password per confermare", type="password")
         if st.button("Conferma Password"):
             process_deletion_with_password(password, st.session_state.password_check["type"], st.session_state.confirm_delete["data"])
+
+# Footer leggero
+st.markdown("---")
+st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
