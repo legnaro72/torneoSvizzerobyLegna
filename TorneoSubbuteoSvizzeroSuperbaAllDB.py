@@ -6,6 +6,7 @@ from fpdf import FPDF
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from bson.objectid import ObjectId
+import requests
 
 # -------------------------
 # Session state (inizializzazione e aggiornamento nome torneo)
