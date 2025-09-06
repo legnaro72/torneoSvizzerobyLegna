@@ -166,7 +166,6 @@ def carica_giocatori_da_db():
         return pd.DataFrame()
 
 # The @st.cache_data decorator must be removed to fix the TypeError.
-# @st.cache_data
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
@@ -203,14 +202,14 @@ def esporta_pdf(df_torneo, nome_torneo):
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Classifica attuale", ln=True)
-
+    
     classifica = aggiorna_classifica(df_torneo)
     if not classifica.empty:
         # Aggiungo la classifica in formato tabellare
         pdf.set_font("Arial", "B", 10)
         header = ['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR']
         col_widths = [45, 15, 10, 10, 10, 10, 10, 10, 10]
-
+        
         for i, h in enumerate(header):
             pdf.cell(col_widths[i], 8, h, border=1, ln=0, align='C')
         pdf.ln()
@@ -227,7 +226,10 @@ def esporta_pdf(df_torneo, nome_torneo):
             pdf.cell(col_widths[7], 8, str(row['GS']), border=1, align='C')
             pdf.cell(col_widths[8], 8, str(row['DR']), border=1, align='C')
             pdf.ln()
-    return bytes(pdf.output(dest="S"))
+
+    return pdf.output(dest="S").encode("latin-1")
+
+
 def aggiorna_classifica(df):
     stats = {}
     for _, r in df.iterrows():
