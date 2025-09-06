@@ -66,7 +66,15 @@ with st.spinner("Connessione a MongoDB..."):
 # Funzioni di utilità
 # -------------------------
 
-@st.cache_data
+def autoplay_audio(audio_data: bytes):
+    b64 = base64.b64encode(audio_data).decode("utf-8")
+    md = f"""
+        <audio autoplay="true">
+        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+        </audio>
+        """
+    st.markdown(md, unsafe_allow_html=True)
+    
 def salva_torneo_su_db():
     """Salva o aggiorna lo stato del torneo su MongoDB."""
     if tournaments_collection is None:
@@ -669,3 +677,28 @@ if st.session_state.torneo_finito:
              </div>
              """, unsafe_allow_html=True)
         st.balloons()
+        # we are the champions
+        # Codice corretto per scaricare l'audio dall'URL
+        audio_url = "https://raw.githubusercontent.com/legnaro72/torneo-Subbuteo-webapp/main/docs/wearethechamp.mp3"
+        try:
+            response = requests.get(audio_url, timeout=10) # Imposta un timeout
+            response.raise_for_status() # Lancia un'eccezione per risposte HTTP errate
+            autoplay_audio(response.content)
+        except requests.exceptions.RequestException as e:
+            st.error(f"Errore durante lo scaricamento dell'audio: {e}")
+
+        # Crea un contenitore vuoto per i messaggi
+        placeholder = st.empty()
+
+        # Lancia i palloncini in un ciclo per 3 secondi
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
