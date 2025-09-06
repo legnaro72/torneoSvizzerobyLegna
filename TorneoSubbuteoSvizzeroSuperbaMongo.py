@@ -560,3 +560,6 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
 # Footer leggero
 st.markdown("---")
 st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
+
+if __name__ == "__main__":
+    main()
