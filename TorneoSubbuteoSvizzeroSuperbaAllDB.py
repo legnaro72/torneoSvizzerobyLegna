@@ -165,7 +165,7 @@ def carica_giocatori_da_db():
         st.warning("⚠️ La connessione a MongoDB non è attiva.")
         return pd.DataFrame()
 
-@st.cache_data
+
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
