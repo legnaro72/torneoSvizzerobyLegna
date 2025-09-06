@@ -705,3 +705,6 @@ if st.session_state.torneo_finito:
         with placeholder.container():
             st.balloons()
             time.sleep(1) # Aspetta 1 secondo
+# Footer leggero
+st.markdown("---")
+st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
