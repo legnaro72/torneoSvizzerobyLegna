@@ -29,7 +29,7 @@ for key, default in {
     "torneo_finito": False,
     "edited_df_squadre": pd.DataFrame(),
     "gioc_info": {},
-    "usa_bottoni_navigazione": False  # Nuovo stato per la navigazione
+    "usa_bottoni_navigazione": False
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -609,20 +609,21 @@ with st.sidebar:
 # Interfaccia Utente Torneo
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
+    
+    col_nav_1, col_nav_2 = st.columns([1,1])
+    with col_nav_1:
+        modalita_visualizzazione = st.radio(
+            "Formato visualizzazione partita:",
+            ['completa', 'squadre', 'giocatori'],
+            key="modalita_visualizzazione"
+        )
+    with col_nav_2:
+        st.session_state.usa_bottoni_navigazione = st.checkbox(
+            "Navigazione turni con bottoni?", 
+            value=st.session_state.usa_bottoni_navigazione
+        )
+
     st.markdown(f"### Turno {st.session_state.turno_attivo}")
-    
-    # Selettore di visualizzazione partite
-    modalita_visualizzazione = st.radio(
-        "Formato visualizzazione partita:",
-        ['completa', 'squadre', 'giocatori'],
-        key="modalita_visualizzazione"
-    )
-    
-    # Checkbox per la navigazione
-    st.session_state.usa_bottoni_navigazione = st.checkbox(
-        "Navigazione turni con bottoni?", 
-        value=st.session_state.usa_bottoni_navigazione
-    )
     
     if st.session_state.usa_bottoni_navigazione:
         col_prev, col_curr, col_next = st.columns([1, 2, 1])
@@ -632,11 +633,11 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                     st.session_state.turno_attivo -= 1
                     st.rerun()
         with col_curr:
-            # Qui si potrebbe mostrare il numero del turno corrente o altro
             st.markdown(f"<p style='text-align:center;'>**Turno Corrente: {st.session_state.turno_attivo}**</p>", unsafe_allow_html=True)
         with col_next:
-            turni_validati = st.session_state.df_torneo['Turno'].unique()
-            if st.session_state.turno_attivo < max(turni_validati):
+            if st.session_state.df_torneo[st.session_state.df_torneo['Turno'] > st.session_state.turno_attivo].empty:
+                st.warning("Non ci sono turni successivi da visualizzare.")
+            else:
                 if st.button("Turno successivo ▶️"):
                     st.session_state.turno_attivo += 1
                     st.rerun()
@@ -681,7 +682,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
 
             if not df_turno_prossimo.empty:
                 if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
-                    salva_torneo_su_db() # Salva i risultati del turno corrente
+                    salva_torneo_su_db()
                     st.session_state.turno_attivo += 1
                     df_turno_prossimo["Turno"] = st.session_state.turno_attivo
                     st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
@@ -691,6 +692,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
             else:
                 st.info("Non ci sono più accoppiamenti possibili. Il torneo è terminato.")
                 st.session_state.torneo_finito = True
+                salva_torneo_su_db()
                 st.rerun()
         else:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
@@ -733,31 +735,28 @@ if st.session_state.torneo_finito:
              </div>
              """, unsafe_allow_html=True)
         st.balloons()
-        # we are the champions
-        # Codice corretto per scaricare l'audio dall'URL
+        
         audio_url = "https://raw.githubusercontent.com/legnaro72/torneo-Subbuteo-webapp/main/docs/wearethechamp.mp3"
         try:
-            response = requests.get(audio_url, timeout=10) # Imposta un timeout
-            response.raise_for_status() # Lancia un'eccezione per risposte HTTP errate
+            response = requests.get(audio_url, timeout=10)
+            response.raise_for_status()
             autoplay_audio(response.content)
         except requests.exceptions.RequestException as e:
             st.error(f"Errore durante lo scaricamento dell'audio: {e}")
 
-        # Crea un contenitore vuoto per i messaggi
         placeholder = st.empty()
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1)
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1)
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1)
 
-        # Lancia i palloncini in un ciclo per 3 secondi
-        with placeholder.container():
-            st.balloons()
-            time.sleep(1) # Aspetta 1 secondo
-        
-        with placeholder.container():
-            st.balloons()
-            time.sleep(1) # Aspetta 1 secondo
-        
-        with placeholder.container():
-            st.balloons()
-            time.sleep(1) # Aspetta 1 secondo
 # Footer leggero
 st.markdown("---")
 st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
