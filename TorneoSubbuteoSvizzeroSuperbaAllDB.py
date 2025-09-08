@@ -139,6 +139,7 @@ def carica_torneo_da_db(nome_torneo):
             st.session_state.torneo_iniziato = torneo_data.get('torneo_iniziato', False)
             st.session_state.setup_mode = None
             st.session_state.risultati_temp = {}
+            # 💡 AGGIUNGI QUESTA RIGA 💡
             if not st.session_state.df_torneo.empty:
                 init_results_temp_from_df(st.session_state.df_torneo)
             return True
@@ -148,8 +149,7 @@ def carica_torneo_da_db(nome_torneo):
     except Exception as e:
         st.error(f"❌ Errore durante il caricamento del torneo: {e}")
         return False
-
-@st.cache_data
+        
 def carica_giocatori_da_db():
     if 'players_collection' in globals() and players_collection is not None:
         try:
@@ -327,9 +327,8 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             key_gc = f"gc_{turno_attivo}_{casa}_{ospite}"
             key_go = f"go_{turno_attivo}_{casa}_{ospite}"
             key_val = f"val_{turno_attivo}_{casa}_{ospite}"
-            
             valida_key = f"valida_{turno_attivo}_{casa}_{ospite}"
-            
+
             # Recupera i dati di squadra e giocatore per la visualizzazione
             info_casa = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == casa].iloc[0]
             info_ospite = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == ospite].iloc[0]
@@ -341,7 +340,6 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             
             st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita</p>", unsafe_allow_html=True)
             
-            # Logica per formattare la stringa in base alla modalità selezionata
             match_string = ""
             if modalita_visualizzazione == 'Squadre':
                 match_string = f"{nome_squadra_casa} vs {nome_squadra_ospite}"
@@ -351,13 +349,37 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
                 match_string = f"{nome_squadra_casa} ({nome_giocatore_casa}) vs {nome_squadra_ospite} ({nome_giocatore_ospite})"
                 
             st.markdown(f"<p style='text-align:center; font-weight:bold;'>🏠{match_string}🛫</p>", unsafe_allow_html=True)
-        
+
+            # 💡 MODIFICA QUI 💡
+            # Usa il valore del DataFrame per inizializzare l'input se non è già nello stato temporaneo
+            gol_casa_iniziale = riga.get('GolCasa', 0)
+            gol_ospite_iniziale = riga.get('GolOspite', 0)
+            validata_iniziale = bool(riga.get('Validata', False))
+
+            if key_gc not in st.session_state.risultati_temp:
+                st.session_state.risultati_temp[key_gc] = gol_casa_iniziale
+            if key_go not in st.session_state.risultati_temp:
+                st.session_state.risultati_temp[key_go] = gol_ospite_iniziale
+            if key_val not in st.session_state.risultati_temp:
+                st.session_state.risultati_temp[key_val] = validata_iniziale
             
             c_score1, c_score2 = st.columns(2)
             with c_score1:
-                st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol {casa}", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
+                st.session_state.risultati_temp[key_gc] = st.number_input(
+                    f"Gol {casa}",
+                    min_value=0,
+                    value=st.session_state.risultati_temp[key_gc], # Usa il valore salvato in session_state
+                    key=key_gc,
+                    disabled=st.session_state.risultati_temp.get(key_val, False)
+                )
             with c_score2:
-                st.session_state.risultati_temp[key_go] = st.number_input(f"Gol {ospite}", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
+                st.session_state.risultati_temp[key_go] = st.number_input(
+                    f"Gol {ospite}",
+                    min_value=0,
+                    value=st.session_state.risultati_temp[key_go], # Usa il valore salvato in session_state
+                    key=key_go,
+                    disabled=st.session_state.risultati_temp.get(key_val, False)
+                )
             
             if st.button("Valida Risultato ✅", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False), use_container_width=True):
                 df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
