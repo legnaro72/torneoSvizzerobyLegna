@@ -46,7 +46,7 @@ st.set_page_config(page_title=f"⚽ {st.session_state.nome_torneo}", layout="wid
 
 players_collection = None
 tournaments_collection = None
-with st.sidebar.spinner("Connessione a MongoDB..."):
+with st.spinner("Connessione a MongoDB..."):
     try:
         MONGO_URI = st.secrets["MONGO_URI"]
         server_api = ServerApi('1')
