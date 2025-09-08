@@ -46,7 +46,7 @@ st.set_page_config(page_title=f"⚽ {st.session_state.nome_torneo}", layout="wid
 
 players_collection = None
 tournaments_collection = None
-with st.spinner("Connessione a MongoDB..."):
+with st.sidebar.spinner("Connessione a MongoDB..."):
     try:
         MONGO_URI = st.secrets["MONGO_URI"]
         server_api = ServerApi('1')
@@ -177,7 +177,6 @@ def carica_giocatori_da_db():
         st.warning("⚠️ La connessione a MongoDB non è attiva.")
         return pd.DataFrame()
 
-# The @st.cache_data decorator must be removed to fix the TypeError.
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
@@ -217,7 +216,6 @@ def esporta_pdf(df_torneo, nome_torneo):
     
     classifica = aggiorna_classifica(df_torneo)
     if not classifica.empty:
-        # Aggiungo la classifica in formato tabellare
         pdf.set_font("Arial", "B", 10)
         header = ['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR']
         col_widths = [45, 15, 10, 10, 10, 10, 10, 10, 10]
@@ -589,10 +587,11 @@ if st.session_state.setup_mode == "nuovo":
 # -------------------------
 with st.sidebar:
     st.header("Opzioni Torneo")
+    st.link_button("➡️ Vai a Hub Tornei", "https://torneo-subbuteo-superba-ita-all-db.streamlit.app/", use_container_width=True)
+    st.markdown("---")
     if st.session_state.torneo_iniziato:
         st.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
 
-        st.markdown("---")
         if tournaments_collection is not None:
             if st.button("💾 Salva su DB", use_container_width=True):
                 salva_torneo_su_db()
