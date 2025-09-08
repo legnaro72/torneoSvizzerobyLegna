@@ -28,7 +28,8 @@ for key, default in {
     "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
     "torneo_finito": False,
     "edited_df_squadre": pd.DataFrame(),
-    "gioc_info": {}
+    "gioc_info": {},
+    "usa_bottoni_navigazione": False  # Nuovo stato per la navigazione
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -319,7 +320,7 @@ def init_results_temp_from_df(df):
         st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
         st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
-def visualizza_incontri_attivi(df_turno_corrente, turno_attivo):
+def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visualizzazione='completa'):
     """Visualizza gli incontri del turno attivo e permette di inserire e validare i risultati."""
     for i, riga in df_turno_corrente.iterrows():
         with st.container(border=True):
@@ -336,15 +337,23 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo):
             
             st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita</p>", unsafe_allow_html=True)
             
-            # Titolo della partita con giocatori
-            st.markdown(f"<p style='text-align:center; font-weight:bold;'>🏠{casa} ({giocatore_casa}) 🆚 {ospite} ({giocatore_ospite})🛫</p>", unsafe_allow_html=True)
-        
+            match modalita_visualizzazione:
+                case 'completa':
+                    titolo_partita = f"🏠{casa} ({giocatore_casa}) 🆚 {ospite} ({giocatore_ospite})🛫"
+                case 'squadre':
+                    titolo_partita = f"🏠{casa} 🆚 {ospite}🛫"
+                case 'giocatori':
+                    titolo_partita = f"👤 {giocatore_casa} 🆚 {giocatore_ospite} 👤"
+                case _:
+                    titolo_partita = f"🏠{casa} ({giocatore_casa}) 🆚 {ospite} ({giocatore_ospite})🛫"
+                    
+            st.markdown(f"<p style='text-align:center; font-weight:bold;'>{titolo_partita}</p>", unsafe_allow_html=True)
             
             c_score1, c_score2 = st.columns(2)
             with c_score1:
-                st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol {casa}", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
+                st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol Casa", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
             with c_score2:
-                st.session_state.risultati_temp[key_go] = st.number_input(f"Gol {ospite}", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
+                st.session_state.risultati_temp[key_go] = st.number_input(f"Gol Ospite", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
             
             if st.button("Valida Risultato ✅", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False), use_container_width=True):
                 df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
@@ -354,6 +363,7 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo):
                 st.session_state.risultati_temp[key_val] = True
                 st.success("✅ Risultato validato!")
                 st.rerun()
+
 # -------------------------
 # Header grafico
 # -------------------------
@@ -591,6 +601,7 @@ with st.sidebar:
             st.session_state.risultati_temp = {}
             st.session_state.nuovo_torneo_step = 1
             st.session_state.torneo_finito = False
+            st.session_state.usa_bottoni_navigazione = False
             st.success("✅ Torneo terminato. Dati resettati.")
             st.rerun()
 
@@ -599,12 +610,54 @@ with st.sidebar:
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
     st.markdown(f"### Turno {st.session_state.turno_attivo}")
+    
+    # Selettore di visualizzazione partite
+    modalita_visualizzazione = st.radio(
+        "Formato visualizzazione partita:",
+        ['completa', 'squadre', 'giocatori'],
+        key="modalita_visualizzazione"
+    )
+    
+    # Checkbox per la navigazione
+    st.session_state.usa_bottoni_navigazione = st.checkbox(
+        "Navigazione turni con bottoni?", 
+        value=st.session_state.usa_bottoni_navigazione
+    )
+    
+    if st.session_state.usa_bottoni_navigazione:
+        col_prev, col_curr, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.session_state.turno_attivo > 1:
+                if st.button("◀️ Turno precedente"):
+                    st.session_state.turno_attivo -= 1
+                    st.rerun()
+        with col_curr:
+            # Qui si potrebbe mostrare il numero del turno corrente o altro
+            st.markdown(f"<p style='text-align:center;'>**Turno Corrente: {st.session_state.turno_attivo}**</p>", unsafe_allow_html=True)
+        with col_next:
+            turni_validati = st.session_state.df_torneo['Turno'].unique()
+            if st.session_state.turno_attivo < max(turni_validati):
+                if st.button("Turno successivo ▶️"):
+                    st.session_state.turno_attivo += 1
+                    st.rerun()
+    else:
+        # Menù a tendina per la navigazione dei turni
+        turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
+        turno_selezionato = st.selectbox(
+            "Seleziona il turno da visualizzare:",
+            options=turni_disponibili,
+            index=turni_disponibili.index(st.session_state.turno_attivo) if st.session_state.turno_attivo in turni_disponibili else 0
+        )
+        if turno_selezionato != st.session_state.turno_attivo:
+            st.session_state.turno_attivo = turno_selezionato
+            st.rerun()
+            
     df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
     
     if df_turno_corrente.empty:
         st.warning("⚠️ Non ci sono partite in questo turno. Torna indietro per aggiungere giocatori o carica un altro torneo.")
     else:
-        visualizza_incontri_attivi(df_turno_corrente, st.session_state.turno_attivo)
+        visualizza_incontri_attivi(df_turno_corrente, st.session_state.turno_attivo, modalita_visualizzazione)
 
     st.markdown("---")
     
