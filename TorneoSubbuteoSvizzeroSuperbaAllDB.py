@@ -344,11 +344,11 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             # Logica per formattare la stringa in base alla modalità selezionata
             match_string = ""
             if modalita_visualizzazione == 'Squadre':
-                match_string = f"**{nome_squadra_casa}** vs **{nome_squadra_ospite}**"
+                match_string = f"{nome_squadra_casa} vs {nome_squadra_ospite}"
             elif modalita_visualizzazione == 'Giocatori':
-                match_string = f"**{nome_giocatore_casa}** vs **{nome_giocatore_ospite}**"
+                match_string = f"{nome_giocatore_casa} vs {nome_giocatore_ospite}"
             elif modalita_visualizzazione == 'Completa':
-                match_string = f"**{nome_squadra_casa} ({nome_giocatore_casa})** vs **{nome_squadra_ospite} ({nome_giocatore_ospite})**"
+                match_string = f"{nome_squadra_casa} ({nome_giocatore_casa}) vs {nome_squadra_ospite} ({nome_giocatore_ospite})"
                 
             st.markdown(f"<p style='text-align:center; font-weight:bold;'>🏠{match_string}🛫</p>", unsafe_allow_html=True)
         
@@ -587,7 +587,7 @@ if st.session_state.setup_mode == "nuovo":
 # -------------------------
 with st.sidebar:
     st.header("Opzioni Torneo")
-    st.link_button("➡️ Vai a Hub Tornei", "https://torneo-subbuteo-superba-ita-all-db.streamlit.app/", use_container_width=True)
+    st.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-superba-all-db.streamlit.app/", use_container_width=True)
     st.markdown("---")
     if st.session_state.torneo_iniziato:
         st.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
