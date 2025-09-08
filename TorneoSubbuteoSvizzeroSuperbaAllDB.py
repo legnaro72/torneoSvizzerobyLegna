@@ -29,8 +29,7 @@ for key, default in {
     "torneo_finito": False,
     "edited_df_squadre": pd.DataFrame(),
     "gioc_info": {},
-    "usa_bottoni_navigazione": False,
-    "vincitore_appena_proclamato": False
+    "modalita_visualizzazione": "Squadre"
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -142,7 +141,6 @@ def carica_torneo_da_db(nome_torneo):
             st.session_state.risultati_temp = {}
             if not st.session_state.df_torneo.empty:
                 init_results_temp_from_df(st.session_state.df_torneo)
-            st.session_state.torneo_finito = False
             return True
         else:
             st.error(f"❌ Torneo '{nome_torneo}' non trovato nel database.")
@@ -179,6 +177,7 @@ def carica_giocatori_da_db():
         st.warning("⚠️ La connessione a MongoDB non è attiva.")
         return pd.DataFrame()
 
+# The @st.cache_data decorator must be removed to fix the TypeError.
 def esporta_pdf(df_torneo, nome_torneo):
     pdf = FPDF()
     pdf.add_page()
@@ -240,7 +239,7 @@ def esporta_pdf(df_torneo, nome_torneo):
             pdf.cell(col_widths[8], 8, str(row['DR']), border=1, align='C')
             pdf.ln()
 
-    return pdf.output(dest="S")
+    return pdf.output(dest="S").encode("latin-1")
 
 
 def aggiorna_classifica(df):
@@ -293,13 +292,6 @@ def aggiorna_classifica(df):
 def genera_accoppiamenti(classifica, precedenti):
     accoppiamenti = []
     gia_abbinati = set()
-    bye_player = None
-    
-    # Se numero giocatori è dispari, l'ultimo della classifica ottiene il riposo
-    if len(classifica) % 2 != 0:
-        bye_player = classifica.iloc[-1]['Squadra']
-        gia_abbinati.add(bye_player)
-
     for i, r1 in classifica.iterrows():
         s1 = r1['Squadra']
         if s1 in gia_abbinati:
@@ -314,7 +306,7 @@ def genera_accoppiamenti(classifica, precedenti):
                 gia_abbinati.add(s2)
                 break
     df = pd.DataFrame([{"Casa": c, "Ospite": o, "GolCasa": 0, "GolOspite": 0, "Validata": False} for c, o in accoppiamenti])
-    return df, bye_player
+    return df
 
 def init_results_temp_from_df(df):
     for _, row in df.iterrows():
@@ -340,28 +332,34 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             
             valida_key = f"valida_{turno_attivo}_{casa}_{ospite}"
             
-            giocatore_casa = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == casa]['Giocatore'].iloc[0]
-            giocatore_ospite = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == ospite]['Giocatore'].iloc[0]
+            # Recupera i dati di squadra e giocatore per la visualizzazione
+            info_casa = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == casa].iloc[0]
+            info_ospite = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == ospite].iloc[0]
+
+            nome_squadra_casa = info_casa['Squadra']
+            nome_giocatore_casa = info_casa['Giocatore']
+            nome_squadra_ospite = info_ospite['Squadra']
+            nome_giocatore_ospite = info_ospite['Giocatore']
             
             st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita</p>", unsafe_allow_html=True)
             
-            match modalita_visualizzazione:
-                case 'completa':
-                    titolo_partita = f"🏠{casa} ({giocatore_casa}) 🆚 {ospite} ({giocatore_ospite})🛫"
-                case 'squadre':
-                    titolo_partita = f"🏠{casa} 🆚 {ospite}🛫"
-                case 'giocatori':
-                    titolo_partita = f"👤 {giocatore_casa} 🆚 {giocatore_ospite} 👤"
-                case _:
-                    titolo_partita = f"🏠{casa} ({giocatore_casa}) 🆚 {ospite} ({giocatore_ospite})🛫"
-                    
-            st.markdown(f"<p style='text-align:center; font-weight:bold;'>{titolo_partita}</p>", unsafe_allow_html=True)
+            # Logica per formattare la stringa in base alla modalità selezionata
+            match_string = ""
+            if modalita_visualizzazione == 'Squadre':
+                match_string = f"**{nome_squadra_casa}** vs **{nome_squadra_ospite}**"
+            elif modalita_visualizzazione == 'Giocatori':
+                match_string = f"**{nome_giocatore_casa}** vs **{nome_giocatore_ospite}**"
+            elif modalita_visualizzazione == 'Completa':
+                match_string = f"**{nome_squadra_casa} ({nome_giocatore_casa})** vs **{nome_squadra_ospite} ({nome_giocatore_ospite})**"
+                
+            st.markdown(f"<p style='text-align:center; font-weight:bold;'>🏠{match_string}🛫</p>", unsafe_allow_html=True)
+        
             
             c_score1, c_score2 = st.columns(2)
             with c_score1:
-                st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol Casa", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
+                st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol {casa}", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
             with c_score2:
-                st.session_state.risultati_temp[key_go] = st.number_input(f"Gol Ospite", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
+                st.session_state.risultati_temp[key_go] = st.number_input(f"Gol {ospite}", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
             
             if st.button("Valida Risultato ✅", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False), use_container_width=True):
                 df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
@@ -371,41 +369,6 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
                 st.session_state.risultati_temp[key_val] = True
                 st.success("✅ Risultato validato!")
                 st.rerun()
-
-def mostra_banner_vincitore():
-    df_class = aggiorna_classifica(st.session_state.df_torneo)
-    if not df_class.empty:
-        st.subheader("Classifica Finale 🥇")
-        st.dataframe(df_class, hide_index=True, use_container_width=True)
-        vincitore = df_class.iloc[0]['Squadra']
-
-        st.markdown(
-            f"""
-            <div style='background:linear-gradient(90deg, gold, orange); 
-                         padding:20px; 
-                         border-radius:12px; 
-                         text-align:center; 
-                         color:black; 
-                         font-size:28px; 
-                         font-weight:bold;
-                         margin-top:20px;'>
-                🏆 Il vincitore del torneo {st.session_state.nome_torneo} è {vincitore}! 🎉
-             </div>
-             """, unsafe_allow_html=True)
-        st.balloons()
-        
-        audio_url = "https://raw.githubusercontent.com/legnaro72/torneo-Subbuteo-webapp/main/docs/wearethechamp.mp3"
-        try:
-            response = requests.get(audio_url, timeout=10)
-            response.raise_for_status()
-            autoplay_audio(response.content)
-        except requests.exceptions.RequestException as e:
-            st.error(f"Errore durante lo scaricamento dell'audio: {e}")
-
-        # Lancia i palloncini in un ciclo
-        for _ in range(3):
-            st.balloons()
-            time.sleep(1)
 
 # -------------------------
 # Header grafico
@@ -434,7 +397,6 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
             if st.button("Carica torneo (MongoDB) 📂", key="btn_carica", use_container_width=True):
                 st.session_state.setup_mode = "carica_db"
                 st.session_state.torneo_finito = False
-                st.session_state.vincitore_appena_proclamato = False
                 st.rerun()
     with c2:
         with st.container(border=True):
@@ -455,7 +417,6 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
                 st.session_state.torneo_finito = False
                 st.session_state.edited_df_squadre = pd.DataFrame()
                 st.session_state.gioc_info = {} # Reset del dizionario per la nuova grafica
-                st.session_state.vincitore_appena_proclamato = False
                 st.rerun()
 
     st.markdown("---")
@@ -474,7 +435,6 @@ if st.session_state.setup_mode == "carica_db":
                     st.balloons()
                     st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
                     st.session_state.torneo_finito = False
-                    st.session_state.vincitore_appena_proclamato = False
                     st.rerun()
     else:
         st.warning("⚠️ Nessun torneo trovato nel database.")
@@ -612,7 +572,7 @@ if st.session_state.setup_mode == "nuovo":
                 }).set_index('Squadra')
 
                 precedenti = set()
-                df_turno, bye_player = genera_accoppiamenti(classifica_iniziale.reset_index(), precedenti)
+                df_turno = genera_accoppiamenti(classifica_iniziale.reset_index(), precedenti)
                 df_turno["Turno"] = st.session_state.turno_attivo
                 st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno], ignore_index=True)
                 st.session_state.setup_mode = None
@@ -647,7 +607,6 @@ with st.sidebar:
             st.session_state.risultati_temp = {}
             st.session_state.nuovo_torneo_step = 1
             st.session_state.torneo_finito = False
-            st.session_state.usa_bottoni_navigazione = False
             st.success("✅ Torneo terminato. Dati resettati.")
             st.rerun()
 
@@ -655,56 +614,22 @@ with st.sidebar:
 # Interfaccia Utente Torneo
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
-    
-    col_nav_1, col_nav_2 = st.columns([1,1])
-    with col_nav_1:
-        modalita_visualizzazione = st.radio(
-            "Formato visualizzazione partita:",
-            ['completa', 'squadre', 'giocatori'],
-            key="modalita_visualizzazione"
-        )
-    with col_nav_2:
-        st.session_state.usa_bottoni_navigazione = st.checkbox(
-            "Navigazione turni con bottoni?", 
-            value=st.session_state.usa_bottoni_navigazione
-        )
-
     st.markdown(f"### Turno {st.session_state.turno_attivo}")
     
-    if st.session_state.usa_bottoni_navigazione:
-        col_prev, col_curr, col_next = st.columns([1, 2, 1])
-        with col_prev:
-            if st.session_state.turno_attivo > 1:
-                if st.button("◀️ Turno precedente"):
-                    st.session_state.turno_attivo -= 1
-                    st.rerun()
-        with col_curr:
-            st.markdown(f"<p style='text-align:center;'>**Turno Corrente: {st.session_state.turno_attivo}**</p>", unsafe_allow_html=True)
-        with col_next:
-            if st.session_state.df_torneo[st.session_state.df_torneo['Turno'] > st.session_state.turno_attivo].empty:
-                st.warning("Non ci sono turni successivi da visualizzare.")
-            else:
-                if st.button("Turno successivo ▶️"):
-                    st.session_state.turno_attivo += 1
-                    st.rerun()
-    else:
-        # Menù a tendina per la navigazione dei turni
-        turni_disponibili = sorted(st.session_state.df_torneo['Turno'].unique())
-        turno_selezionato = st.selectbox(
-            "Seleziona il turno da visualizzare:",
-            options=turni_disponibili,
-            index=turni_disponibili.index(st.session_state.turno_attivo) if st.session_state.turno_attivo in turni_disponibili else 0
-        )
-        if turno_selezionato != st.session_state.turno_attivo:
-            st.session_state.turno_attivo = turno_selezionato
-            st.rerun()
-            
+    # Radio box per la modalità di visualizzazione
+    st.session_state.modalita_visualizzazione = st.radio(
+        "🔹 Seleziona visualizzazione partita:",
+        options=["Squadre", "Giocatori", "Completa"],
+        index=["Squadre", "Giocatori", "Completa"].index(st.session_state.modalita_visualizzazione)
+    )
+
     df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
     
     if df_turno_corrente.empty:
         st.warning("⚠️ Non ci sono partite in questo turno. Torna indietro per aggiungere giocatori o carica un altro torneo.")
     else:
-        visualizza_incontri_attivi(df_turno_corrente, st.session_state.turno_attivo, modalita_visualizzazione)
+        # Passa il nuovo parametro alla funzione
+        visualizza_incontri_attivi(df_turno_corrente, st.session_state.turno_attivo, st.session_state.modalita_visualizzazione)
 
     st.markdown("---")
     
@@ -724,10 +649,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
         st.subheader("Prossimo Turno ➡️")
         if tutte_validate:
             precedenti = set(zip(st.session_state.df_torneo['Casa'], st.session_state.df_torneo['Ospite'])) | set(zip(st.session_state.df_torneo['Ospite'], st.session_state.df_torneo['Casa']))
-            df_turno_prossimo, bye_player = genera_accoppiamenti(classifica_attuale, precedenti)
-
-            if bye_player:
-                st.info(f"Il giocatore con il riposo per questo turno è **{bye_player}**.")
+            df_turno_prossimo = genera_accoppiamenti(classifica_attuale, precedenti)
 
             if not df_turno_prossimo.empty:
                 if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
@@ -741,8 +663,6 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
             else:
                 st.info("Non ci sono più accoppiamenti possibili. Il torneo è terminato.")
                 st.session_state.torneo_finito = True
-                st.session_state.vincitore_appena_proclamato = True
-                salva_torneo_su_db()
                 st.rerun()
         else:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
@@ -764,10 +684,52 @@ if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
 # -------------------------
 # Banner vincitore
 # -------------------------
-if st.session_state.torneo_finito and st.session_state.vincitore_appena_proclamato:
-    mostra_banner_vincitore()
-    st.session_state.vincitore_appena_proclamato = False
+if st.session_state.torneo_finito:
+    st.subheader("Classifica Finale 🥇")
+    df_class = aggiorna_classifica(st.session_state.df_torneo)
+    if not df_class.empty:
+        st.dataframe(df_class, hide_index=True, use_container_width=True)
+        vincitore = df_class.iloc[0]['Squadra']
 
+        st.markdown(
+            f"""
+            <div style='background:linear-gradient(90deg, gold, orange); 
+                         padding:20px; 
+                         border-radius:12px; 
+                         text-align:center; 
+                         color:black; 
+                         font-size:28px; 
+                         font-weight:bold;
+                         margin-top:20px;'>
+                🏆 Il vincitore del torneo {st.session_state.nome_torneo} è {vincitore}! 🎉
+             </div>
+             """, unsafe_allow_html=True)
+        st.balloons()
+        # we are the champions
+        # Codice corretto per scaricare l'audio dall'URL
+        audio_url = "https://raw.githubusercontent.com/legnaro72/torneo-Subbuteo-webapp/main/docs/wearethechamp.mp3"
+        try:
+            response = requests.get(audio_url, timeout=10) # Imposta un timeout
+            response.raise_for_status() # Lancia un'eccezione per risposte HTTP errate
+            autoplay_audio(response.content)
+        except requests.exceptions.RequestException as e:
+            st.error(f"Errore durante lo scaricamento dell'audio: {e}")
+
+        # Crea un contenitore vuoto per i messaggi
+        placeholder = st.empty()
+
+        # Lancia i palloncini in un ciclo per 3 secondi
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
 # Footer leggero
 st.markdown("---")
 st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
