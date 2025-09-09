@@ -62,7 +62,7 @@ with st.spinner("Connessione a MongoDB..."):
         tournaments_collection = db_tournaments.get_collection("SuperbaSvizzero")
         _ = tournaments_collection.find_one()
 
-        st.sidebar.success("✅ Connessione a MongoDB Atlas riuscita.")
+        #st.sidebar.toast("✅ Connessione a MongoDB Atlas riuscita.")
     except Exception as e:
         st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
 
@@ -342,11 +342,11 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             
             match_string = ""
             if modalita_visualizzazione == 'Squadre':
-                match_string = f"{nome_squadra_casa} vs {nome_squadra_ospite}"
+                match_string = f"{nome_squadra_casa} 🆚 {nome_squadra_ospite}"
             elif modalita_visualizzazione == 'Giocatori':
-                match_string = f"{nome_giocatore_casa} vs {nome_giocatore_ospite}"
+                match_string = f"{nome_giocatore_casa} 🆚 {nome_giocatore_ospite}"
             elif modalita_visualizzazione == 'Completa':
-                match_string = f"{nome_squadra_casa} ({nome_giocatore_casa}) vs {nome_squadra_ospite} ({nome_giocatore_ospite})"
+                match_string = f"{nome_squadra_casa} ({nome_giocatore_casa}) 🆚 {nome_squadra_ospite} ({nome_giocatore_ospite})"
                 
             st.markdown(f"<p style='text-align:center; font-weight:bold;'>🏠{match_string}🛫</p>", unsafe_allow_html=True)
 
@@ -440,6 +440,9 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
                 st.rerun()
 
     st.markdown("---")
+
+if "mostra_incontri_disputati" not in st.session_state:
+    st.session_state["mostra_incontri_disputati"] = False
 
 # -------------------------
 # Logica di caricamento o creazione torneo
@@ -615,11 +618,13 @@ with st.sidebar:
         st.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
 
         if tournaments_collection is not None:
-            if st.button("💾 Salva su DB", use_container_width=True):
+            if st.button("💾 Salva Torneo", key="save_tournament", use_container_width=True):
                 salva_torneo_su_db()
+                st.success("✅ Torneo salvato su DB!")
+
         st.markdown("---")
-        
-        if st.button("🏁 Termina Torneo", use_container_width=True):
+        if st.button("🏁 Termina Torneo", key="reset_app", use_container_width=True):
+            salva_torneo_su_db()
             st.session_state.torneo_iniziato = False
             st.session_state.setup_mode = None
             st.session_state.df_torneo = pd.DataFrame()
@@ -631,19 +636,46 @@ with st.sidebar:
             st.success("✅ Torneo terminato. Dati resettati.")
             st.rerun()
 
+        st.markdown("---")
+
+        # --- Pulsante Visualizza tutti gli incontri disputati ---
+        if st.button("👀 Visualizza tutti gli incontri disputati", key="btn_mostra_tutti_incontri", use_container_width=True):
+            st.session_state["mostra_incontri_disputati"] = True
+            st.rerun()
+
+        st.markdown("---")
+        # --- Radio box visualizzazione incontri ---
+        st.subheader("Visualizzazione incontri")
+        st.session_state.modalita_visualizzazione = st.radio(
+            "🔹 Seleziona visualizzazione partita:",
+            options=["Squadre", "Giocatori", "Completa"],
+            index=["Squadre", "Giocatori", "Completa"].index(st.session_state.modalita_visualizzazione),
+            key="radio_sidebar"
+        )
+
 # -------------------------
 # Interfaccia Utente Torneo
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
-    st.markdown(f"### Turno {st.session_state.turno_attivo}")
+    if st.session_state["mostra_incontri_disputati"]:
+        st.subheader("📋 Tutti gli incontri disputati")
+        df_giocati = st.session_state.df_torneo[st.session_state.df_torneo['Validata'] == True]
+        if not df_giocati.empty:
+            st.dataframe(
+                df_giocati[['Turno', 'Casa', 'GolCasa', 'GolOspite', 'Ospite']],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Nessun incontro validato al momento.")
+        # Pulsante per chiudere la tabella e tornare alla vista classica
+        if st.button("🔙 Torna alla vista classica", key="btn_chiudi_incontri"):
+            st.session_state["mostra_incontri_disputati"] = False
+            st.rerun()
+    else:
+        st.markdown(f"### Turno {st.session_state.turno_attivo}")
     
-    # Radio box per la modalità di visualizzazione
-    st.session_state.modalita_visualizzazione = st.radio(
-        "🔹 Seleziona visualizzazione partita:",
-        options=["Squadre", "Giocatori", "Completa"],
-        index=["Squadre", "Giocatori", "Completa"].index(st.session_state.modalita_visualizzazione)
-    )
-
+    
     df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
     
     if df_turno_corrente.empty:
