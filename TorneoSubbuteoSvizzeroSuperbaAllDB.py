@@ -691,7 +691,7 @@ st.sidebar.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-
 st.sidebar.markdown("---")
 
 if st.session_state.torneo_iniziato:
-    st.sidebar.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
+    #st.sidebar.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
     
     # ✅ 2. ⚙️ Opzioni Torneo
     st.sidebar.subheader("⚙️ Opzioni Torneo")
@@ -816,20 +816,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
         else:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
 
-# -------------------------
-# Esportazione
-# -------------------------
-if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
-    file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     
-    st.sidebar.download_button(
-        label="⬇️ Esporta torneo in PDF",
-        data=pdf_bytes,
-        file_name=file_name_pdf,
-        mime="application/pdf"
-    )
-        
 # -------------------------
 # Banner vincitore
 # -------------------------
