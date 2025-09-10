@@ -71,6 +71,39 @@ st.markdown("""
     transform: translateY(-1px); 
     box-shadow: 0 6px 18px #00000033; 
 }
+        
+        /* Stile per il link button nella sidebar sia per tema chiaro che scuro */
+        [data-testid="stSidebar"] .stLinkButton a {
+            color: white !important;
+            background: linear-gradient(90deg, #457b9d, #1d3557) !important;
+            border-radius: 10px !important;
+            padding: 0.55em 1.0em !important;
+            font-weight: 700 !important;
+            text-decoration: none !important;
+            transition: all 0.2s ease !important;
+            display: inline-block !important;
+            width: 100% !important;
+            text-align: center !important;
+            border: none !important;
+            box-shadow: 0 4px 14px #00000022 !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton a:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 6px 18px #00000033 !important;
+            color: white !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton a:active {
+            transform: translateY(0) !important;
+        }
+        
+        /* Override per il tema scuro */
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a,
+        html[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a,
+        body[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a {
+            color: white !important;
+        }
 /* Main content h3 styling - solo per contenuto principale */
 .main .block-container h3 { 
     color: white; 
@@ -152,33 +185,48 @@ body[data-theme="dark"] .css-1d391kg h3 {
     color: white !important;
 }
 
-/* Forza il colore bianco usando JavaScript per i subheader */
-</style>
-<script>
-// Funzione per forzare il colore bianco sui subheader della sidebar
-function forceWhiteSubheaders() {
-    const sidebar = document.querySelector('[data-testid="stSidebar"]');
-    if (sidebar) {
-        const h3Elements = sidebar.querySelectorAll('h3');
-        h3Elements.forEach(h3 => {
-            h3.style.color = 'white';
-            h3.style.setProperty('color', 'white', 'important');
-        });
-    }
+/* Forza il colore blu per i subheader della sidebar in entrambi i temi */
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h3[class*="st-emotion-cache"],
+[data-testid="stSidebar"] h3[class*="css"],
+[data-testid="stSidebar"] h3[class*="element-container"],
+[data-testid="stSidebar"] h3[class*="stMarkdown"],
+[data-testid="stSidebar"] h3[class*="stSubheader"],
+[data-testid="stSidebar"] h3[class*="stHeadingContainer"],
+[data-testid="stSidebar"] h3[class*="stTitle"],
+[data-testid="stSidebar"] .stMarkdown h3,
+[data-testid="stSidebar"] .element-container h3,
+[data-testid="stSidebar"] .stSubheader h3,
+[data-testid="stSidebar"] .stHeadingContainer h3,
+[data-testid="stSidebar"] .stTitle h3,
+.stApp[data-theme="light"] [data-testid="stSidebar"] h3,
+.stApp[data-theme="dark"] [data-testid="stSidebar"] h3,
+html[data-theme="light"] [data-testid="stSidebar"] h3,
+html[data-theme="dark"] [data-testid="stSidebar"] h3,
+body[data-theme="light"] [data-testid="stSidebar"] h3,
+body[data-theme="dark"] [data-testid="stSidebar"] h3 {
+    color: #0078D4 !important;
+    font-weight: 700;
+    background: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    text-align: left !important;
 }
 
-// Esegui la funzione quando la pagina è caricata
-document.addEventListener('DOMContentLoaded', forceWhiteSubheaders);
+/* Rimuovi eventuali stili di hover o focus che potrebbero sovrascrivere */
+[data-testid="stSidebar"] h3:hover,
+[data-testid="stSidebar"] h3:focus,
+[data-testid="stSidebar"] h3:active {
+    color: #0078D4 !important;
+}
 
-// Esegui la funzione ogni volta che Streamlit aggiorna il DOM
-const observer = new MutationObserver(forceWhiteSubheaders);
-observer.observe(document.body, { childList: true, subtree: true });
-
-// Esegui immediatamente
-forceWhiteSubheaders();
-</script>
-<style>
-</style>
+/* Forza il colore anche per i temi personalizzati */
+[data-testid="stSidebar"] h3[style*="color"],
+[data-testid="stSidebar"] h3[style*="color"]:hover,
+[data-testid="stSidebar"] h3[style*="color"]:focus {
+    color: #0078D4 !important;
+}
 """, unsafe_allow_html=True)
 
 # -------------------------
@@ -775,7 +823,6 @@ if st.session_state.setup_mode == "nuovo":
 # ✅ 1. 🕹️ Gestione Rapida (in cima)
 st.sidebar.subheader("🕹️ Gestione Rapida")
 st.sidebar.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-superba-all-db.streamlit.app/", use_container_width=True)
-
 st.sidebar.markdown("---")
 
 if st.session_state.torneo_iniziato:
