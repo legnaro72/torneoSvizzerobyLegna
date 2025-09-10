@@ -18,7 +18,7 @@ try:
     client_players.admin.command('ping')
     client_italiana.admin.command('ping')
     client_svizzera.admin.command('ping')
-    st.sidebar.success("✅ Connessioni a MongoDB riuscite!")
+    #st.sidebar.success("✅ Connessioni a MongoDB riuscite!")
 except Exception as e:
     st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
     st.stop() # Interrompe l'app se la connessione fallisce
@@ -26,6 +26,228 @@ except Exception as e:
 # --- Sezione per la gestione dei giocatori ---
 db_players = client_players["giocatori_subbuteo"]
 collection_players = db_players["superba_players"]
+
+def inject_css():
+    st.markdown("""
+        <style>
+        /* Stili di base */
+        ul, li { 
+            list-style-type: none !important; 
+            padding-left: 0 !important; 
+            margin-left: 0 !important; 
+        }
+        
+        /* Titoli */
+        .big-title { 
+            text-align: center; 
+            font-size: clamp(22px, 4vw, 42px); 
+            font-weight: 800; 
+            margin: 15px 0 10px; 
+            color: #e63946; 
+            text-shadow: 0 1px 2px #0002; 
+        }
+        
+        .sub-title { 
+            font-size: 20px; 
+            font-weight: 700; 
+            margin-top: 10px; 
+            color: #1d3557; 
+        }
+        
+        /* Stile per il titolo principale */
+        .button-title {
+            background: linear-gradient(90deg, #457b9d, #1d3557);
+            color: white !important;
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 4px 14px #00000022;
+            transition: all 0.3s ease;
+            font-size: 2em;
+            font-weight: 700;
+            text-decoration: none !important;
+            display: inline-block;
+            width: 100%;
+        }
+        
+        /* Stili per i pulsanti */
+        .stButton>button { 
+            background: linear-gradient(90deg, #457b9d, #1d3557); 
+            color: white; 
+            border-radius: 10px; 
+            padding: 0.55em 1.0em; 
+            font-weight: 700; 
+            border: 0; 
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover { 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 14px #00000022; 
+        }
+        
+        .stDownloadButton>button { 
+            background: linear-gradient(90deg, #2a9d8f, #21867a); 
+            color: white; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            border: 0; 
+            transition: all 0.3s ease;
+        }
+        
+        .stDownloadButton>button:hover { 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 14px #00000022; 
+        }
+        
+        /* Stili per le tabelle */
+        .stDataFrame { 
+            border: 2px solid #f4a261; 
+            border-radius: 10px; 
+        }
+        
+        /* Stile per i badge */
+        .pill { 
+            display:inline-block; 
+            padding: 4px 10px; 
+            border-radius: 999px; 
+            background:#f1faee; 
+            color:#1d3557; 
+            font-weight:700; 
+            border:1px solid #a8dadc; 
+        }
+        
+        /* Stili per la sidebar */
+        [data-testid="stSidebar"] h3 {
+            color: #0078D4 !important;
+        }
+        
+        /* Stili per i link nella sidebar */
+        [data-testid="stSidebar"] .stLinkButton,
+        [data-testid="stSidebar"] .stLinkButton a,
+        [data-testid="stSidebar"] .stLinkButton a:visited,
+        [data-testid="stSidebar"] .stLinkButton a:hover,
+        [data-testid="stSidebar"] .stLinkButton a:active {
+            background: linear-gradient(90deg, #457b9d, #1d3557) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 10px !important;
+            padding: 0.5rem 1rem !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            text-decoration: none !important;
+            display: inline-block !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            width: 100% !important;
+            margin: 5px 0 !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton:hover,
+        [data-testid="stSidebar"] .stLinkButton a:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton:active,
+        [data-testid="stSidebar"] .stLinkButton a:active {
+            transform: translateY(0) !important;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        /* Stili per il tema scuro */
+        @media (prefers-color-scheme: dark) {
+            [data-testid="stSidebar"] h3,
+            .css-1d391kg h3,
+            [data-testid="stSidebar"] .element-container h3,
+            .css-1d391kg .element-container h3 {
+                color: #ffffff !important;
+                background: none !important;
+            }
+            
+            [data-testid="stSidebar"] h3 {
+                color: white !important;
+            }
+        }
+        
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] h3,
+        .stApp[data-theme="dark"] .css-1d391kg h3,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .element-container h3,
+        .stApp[data-theme="dark"] .css-1d391kg .element-container h3,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] div h3,
+        .stApp[data-theme="dark"] .css-1d391kg div h3,
+        html[data-theme="dark"] [data-testid="stSidebar"] h3,
+        html[data-theme="dark"] .css-1d391kg h3,
+        body[data-theme="dark"] [data-testid="stSidebar"] h3,
+        body[data-theme="dark"] .css-1d391kg h3,
+        [data-testid="stSidebar"] h3[class*="css"],
+        .css-1d391kg h3[class*="css"],
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] * h3,
+        .stApp[data-theme="dark"] .css-1d391kg * h3,
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] .stMarkdown h3,
+        [data-testid="stSidebar"] div h3 {
+            color: #ffffff !important;
+            background: none !important;
+        }
+        
+        /* Stili per i pulsanti nella sidebar con tema scuro */
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton,
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton a,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a {
+            background: linear-gradient(90deg, #1d3557, #457b9d) !important;
+            color: white !important;
+        }
+        
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton:hover,
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton a:hover,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton:hover,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a:hover {
+            background: linear-gradient(90deg, #1d3557, #3a6ea5) !important;
+        }
+        
+        /* Stili per dispositivi mobili */
+        @media (max-width: 768px) {
+            .st-emotion-cache-1f84s9j, 
+            .st-emotion-cache-1j0n4k { 
+                flex-direction: row; 
+                justify-content: center; 
+            }
+            .st-emotion-cache-1f84s9j > div, 
+            .st-emotion-cache-1j0n4k > div { 
+                flex: 1; 
+                padding: 0 5px; 
+            }
+        }
+        </style>
+        
+        <script>
+        // Funzione per forzare il colore bianco sui subheader della sidebar
+        function forceWhiteSubheaders() {
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            if (sidebar) {
+                const h3Elements = sidebar.querySelectorAll('h3');
+                h3Elements.forEach(h3 => {
+                    h3.style.color = 'white';
+                    h3.style.setProperty('color', 'white', 'important');
+                });
+            }
+        }
+
+        // Esegui la funzione quando la pagina è caricata
+        document.addEventListener('DOMContentLoaded', forceWhiteSubheaders);
+
+        // Esegui la funzione ogni volta che Streamlit aggiorna il DOM
+        const observer = new MutationObserver(forceWhiteSubheaders);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Esegui immediatamente
+        forceWhiteSubheaders();
+        </script>
+    """, unsafe_allow_html=True)
+
 
 def carica_dati_da_mongo():
     data = list(collection_players.find())
@@ -83,7 +305,11 @@ def salva_tornei_svizzeri(df):
 
 
 st.set_page_config(page_title="Gestione Superba All-in-one", layout="wide")
-st.title("🎲 Gestione del Club e dei Tornei")
+
+# Inietta gli stili CSS personalizzati
+inject_css()
+
+st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)
 
 # Inizializza i dataframe nel session state
 if "df_giocatori" not in st.session_state:
@@ -274,14 +500,14 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
 
     col_del_all_ita, col_del_all_svizz, col_del_all = st.columns(3)
     with col_del_all_ita:
-        st.button("❌ Cancella tutti i tornei all'italiana", on_click=confirm_delete_all_tornei_italiana)
+        st.button("❌ Cancella tutti i tornei all'italiana 🇮🇹", on_click=confirm_delete_all_tornei_italiana)
     with col_del_all_svizz:
-        st.button("❌ Cancella tutti i tornei svizzeri", on_click=confirm_delete_all_tornei_svizzeri)
+        st.button("❌ Cancella tutti i tornei svizzeri 🇨🇭", on_click=confirm_delete_all_tornei_svizzeri)
     with col_del_all:
         st.button("❌ Cancella TUTTI i tornei", on_click=confirm_delete_all_tornei_all)
 
     # Sezione per i tornei all'italiana
-    st.subheader("Tornei all'italiana")
+    st.subheader("🇮🇹 Tornei all'italiana 🇮🇹")
     df_tornei_italiana = st.session_state.df_tornei_italiana.copy()
     if not df_tornei_italiana.empty:
         st.dataframe(df_tornei_italiana[["Torneo"]], use_container_width=True)
@@ -297,7 +523,7 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
     st.markdown("---")
 
     # Sezione per i tornei svizzeri
-    st.subheader("Tornei svizzeri")
+    st.subheader("🇨🇭 Tornei svizzeri 🇨🇭")
     df_tornei_svizzeri = st.session_state.df_tornei_svizzeri.copy()
     if not df_tornei_svizzeri.empty:
         st.dataframe(df_tornei_svizzeri[["Torneo"]], use_container_width=True)
