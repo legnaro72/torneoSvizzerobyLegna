@@ -912,7 +912,6 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                 font-size: 0.9em;
                 width: auto !important;
                 border-collapse: collapse;
-                margin: 0 auto;
             }
             .compact-table th, .compact-table td {
                 padding: 2px 6px !important;
