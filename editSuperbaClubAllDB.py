@@ -309,6 +309,12 @@ st.set_page_config(page_title="Gestione Superba All-in-one", layout="wide")
 # Inietta gli stili CSS personalizzati
 inject_css()
 
+# Sidebar / Pagina
+# ✅ 1. 🕹 Gestione Rapida (sempre in cima)
+st.sidebar.subheader("🕹️ Gestione Rapida")
+st.sidebar.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-superba-all-db.streamlit.app/", use_container_width=True)
+st.sidebar.markdown("---")
+
 st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)
 
 # Inizializza i dataframe nel session state
@@ -462,7 +468,7 @@ def process_deletion_with_password(password, deletion_type, data):
 
 # Logica di visualizzazione basata sullo stato
 if st.session_state.edit_index is None and st.session_state.confirm_delete["type"] is None:
-    st.header("Gestione Giocatori")
+    st.header("👥Gestione Giocatori")
     st.subheader("Lista giocatori")
     df = st.session_state.df_giocatori.copy()
     if not df.empty:
@@ -496,7 +502,7 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
 
     # ---
     st.markdown("---")
-    st.header("Gestione Tornei")
+    st.header("🏆Gestione Tornei")
 
     col_del_all_ita, col_del_all_svizz, col_del_all = st.columns(3)
     with col_del_all_ita:
