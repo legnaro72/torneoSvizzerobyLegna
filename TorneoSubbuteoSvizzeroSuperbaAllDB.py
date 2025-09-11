@@ -284,20 +284,30 @@ def salva_torneo_su_db():
     }
 
     try:
-        # Cerca un torneo esistente con lo stesso nome
-        existing_doc = tournaments_collection.find_one({"nome_torneo": st.session_state.nome_torneo})
-
-        if existing_doc:
-            # Aggiorna il documento esistente
+        # Se abbiamo un ID torneo nella sessione, aggiorniamo quel documento specifico
+        if 'tournament_id' in st.session_state and st.session_state.tournament_id:
             tournaments_collection.update_one(
-                {"_id": existing_doc["_id"]},
+                {"_id": ObjectId(st.session_state.tournament_id)},
                 {"$set": torneo_data}
             )
             st.success(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
         else:
-            # Crea un nuovo documento
-            tournaments_collection.insert_one(torneo_data)
-            st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+            # Altrimenti cerchiamo un torneo esistente con lo stesso nome
+            existing_doc = tournaments_collection.find_one({"nome_torneo": st.session_state.nome_torneo})
+            
+            if existing_doc:
+                # Aggiorna il documento esistente e salva l'ID nella sessione
+                tournaments_collection.update_one(
+                    {"_id": existing_doc["_id"]},
+                    {"$set": torneo_data}
+                )
+                st.session_state.tournament_id = str(existing_doc["_id"])
+                st.success(f"✅ Torneo esistente '{st.session_state.nome_torneo}' aggiornato con successo!")
+            else:
+                # Crea un nuovo documento e salva l'ID nella sessione
+                result = tournaments_collection.insert_one(torneo_data)
+                st.session_state.tournament_id = str(result.inserted_id)
+                st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
@@ -328,6 +338,8 @@ def carica_torneo_da_db(nome_torneo):
             st.session_state.torneo_iniziato = torneo_data.get('torneo_iniziato', False)
             st.session_state.setup_mode = None
             st.session_state.risultati_temp = {}
+            # Salva l'ID del torneo nella sessione
+            st.session_state.tournament_id = str(torneo_data['_id'])
             # 💡 AGGIUNGI QUESTA RIGA 💡
             if not st.session_state.df_torneo.empty:
                 init_results_temp_from_df(st.session_state.df_torneo)
@@ -864,7 +876,7 @@ if st.session_state.torneo_iniziato:
     
     # 📅 Visualizzazione incontri giocati
     with st.sidebar.expander("📅 Visualizzazione incontri giocati", expanded=False):
-        if st.button("👀 Visualizza tutti gli incontri disputati", key="btn_mostra_tutti_incontri", use_container_width=True):
+        if st.button("📋 Mostra tutti gli incontri disputati", key="btn_mostra_tutti_incontri", use_container_width=True):
             st.session_state["mostra_incontri_disputati"] = True
             st.rerun()
 
@@ -889,18 +901,84 @@ else:
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
     if st.session_state["mostra_incontri_disputati"]:
-        st.subheader("📋 Tutti gli incontri disputati")
+        st.markdown("## 🏟️ Tutti gli incontri disputati")
         df_giocati = st.session_state.df_torneo[st.session_state.df_torneo['Validata'] == True]
+        
         if not df_giocati.empty:
-            st.dataframe(
-                df_giocati[['Turno', 'Casa', 'GolCasa', 'GolOspite', 'Ospite']],
-                use_container_width=True,
-                hide_index=True
-            )
+            # Add some CSS for the table
+            st.markdown("""
+            <style>
+            .compact-table {
+                font-size: 0.9em;
+                width: auto !important;
+                border-collapse: collapse;
+                margin: 0 auto;
+            }
+            .compact-table th, .compact-table td {
+                padding: 2px 6px !important;
+                text-align: center !important;
+                white-space: nowrap;
+                border: none;
+            }
+            .compact-table th {
+                color: #333 !important;
+                font-weight: bold;
+                border-bottom: 1px solid #ddd;
+            }
+            .compact-table tr {
+                border-bottom: 1px solid #eee;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # Generate the HTML table
+            table_html = "<table class='compact-table'><thead><tr>"
+            headers = ["📅", "🏠", "⚽️", "⚽️", "🛫"]
+            for header in headers:
+                table_html += f"<th>{header}</th>"
+            table_html += "</tr></thead><tbody>"
+            
+            # Add table rows
+            for _, match in df_giocati.iterrows():
+                table_html += "<tr>"
+                # Column 1: Round with number emoji
+                turno_num = match['Turno']
+                # Map numbers to emojis
+                num_to_emoji = {
+                    0: "0️⃣", 1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 
+                    4: "4️⃣", 5: "5️⃣", 6: "6️⃣", 
+                    7: "7️⃣", 8: "8️⃣", 9: "9️⃣"
+                }
+                # Get emoji for the turn number, default to 🔵 if not a single digit
+                if isinstance(turno_num, (int, float)) and 0 <= turno_num <= 9:
+                    turno_emoji = num_to_emoji[int(turno_num)]
+                else:
+                    turno_emoji = "🔵"  # Default for unknown turn numbers
+                table_html += f"<td style='font-weight: bold; text-align: center;'>{turno_emoji}</td>"
+                
+                # Column 2: Home team
+                table_html += f"<td style='text-align: right;'>{match['Casa']}</td>"
+                
+                # Column 3: Home goals
+                gol_casa = match['GolCasa'] if pd.notna(match['GolCasa']) else "-"
+                table_html += f"<td style='font-weight: bold; text-align: center;'>{gol_casa}</td>"
+                
+                # Column 4: Away goals
+                gol_ospite = match['GolOspite'] if pd.notna(match['GolOspite']) else "-"
+                table_html += f"<td style='font-weight: bold; text-align: center;'>{gol_ospite}</td>"
+                
+                # Column 5: Away team
+                table_html += f"<td style='text-align: left;'>{match['Ospite']}</td>"
+                
+                table_html += "</tr>"
+                
+            table_html += "</tbody></table>"
+            st.markdown(table_html, unsafe_allow_html=True)
         else:
             st.info("Nessun incontro validato al momento.")
+            
         # Pulsante per chiudere la tabella e tornare alla vista classica
-        if st.button("🔙 Torna alla vista classica", key="btn_chiudi_incontri"):
+        if st.button("🔙 Torna alla vista classica", key="btn_chiudi_incontri", use_container_width=True):
             st.session_state["mostra_incontri_disputati"] = False
             st.rerun()
     else:

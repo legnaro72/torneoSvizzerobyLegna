@@ -470,9 +470,48 @@ def process_deletion_with_password(password, deletion_type, data):
 if st.session_state.edit_index is None and st.session_state.confirm_delete["type"] is None:
     st.header("👥Gestione Giocatori")
     st.subheader("Lista giocatori")
+    
+    # Create a copy of the dataframe for editing
     df = st.session_state.df_giocatori.copy()
+    
     if not df.empty:
-        st.dataframe(df, use_container_width=True)
+        # Make the dataframe editable
+        edited_df = st.data_editor(
+            df,
+            disabled=["id"],  # Make the ID column read-only
+            num_rows="dynamic",  # Allow adding/deleting rows
+            use_container_width=True,
+            column_config={
+                "Giocatore": "Giocatore",
+                "Squadra": "Squadra",
+                "Potenziale": st.column_config.NumberColumn("Potenziale", min_value=1, max_value=10, step=1, format="%d")
+            }
+        )
+        
+        # Add save button
+        if st.button("💾 Salva Modifiche Tabella"):
+            st.session_state.show_password_dialog = True
+            
+        # Password dialog
+        if st.session_state.get('show_password_dialog', False):
+            password = st.text_input("Inserisci la password per salvare le modifiche:", type="password")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Conferma Salvataggio"):
+                    if password == "Legnaro72":
+                        # Update the dataframe in session state
+                        st.session_state.df_giocatori = edited_df
+                        # Save to database
+                        salva_dati_su_mongo(edited_df)
+                        st.success("✅ Modifiche salvate con successo!")
+                        st.session_state.show_password_dialog = False
+                        st.rerun()
+                    else:
+                        st.error("❌ Password errata. Le modifiche non sono state salvate.")
+            with col2:
+                if st.button("❌ Annulla"):
+                    st.session_state.show_password_dialog = False
+                    st.rerun()
     else:
         st.info("Nessun giocatore trovato. Aggiungine uno per iniziare!")
 
