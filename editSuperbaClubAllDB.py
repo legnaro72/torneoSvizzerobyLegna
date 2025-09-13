@@ -3,6 +3,12 @@ import pandas as pd
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
+# Import auth utilities
+from auth_utils import show_auth_screen, verify_write_access
+
+# Mostra la schermata di autenticazione all'avvio
+show_auth_screen()
+
 # Dati di connessione a MongoDB forniti dall'utente
 MONGO_URI_PLAYERS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"

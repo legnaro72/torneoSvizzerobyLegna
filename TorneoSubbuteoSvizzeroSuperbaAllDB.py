@@ -11,6 +11,12 @@ import requests
 import base64
 import time
 
+# Import auth utilities
+from auth_utils import show_auth_screen, verify_write_access
+
+# Mostra la schermata di autenticazione all'avvio
+show_auth_screen()
+
 # -------------------------
 # Session state (inizializzazione e aggiornamento nome torneo)
 # -------------------------
