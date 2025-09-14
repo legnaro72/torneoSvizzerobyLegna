@@ -2,30 +2,279 @@ import streamlit as st
 import pandas as pd
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import certifi
+
+# Import auth utilities
+import auth_utils as auth
 
 # Dati di connessione a MongoDB forniti dall'utente
 MONGO_URI_PLAYERS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS_CH = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
-# Crea tre connessioni separate come richiesto
-try:
-    client_players = MongoClient(MONGO_URI_PLAYERS, server_api=ServerApi('1'))
-    client_italiana = MongoClient(MONGO_URI_TOURNEMENTS, server_api=ServerApi('1'))
-    client_svizzera = MongoClient(MONGO_URI_TOURNEMENTS_CH, server_api=ServerApi('1'))
-    
-    # Invia un ping a ciascun client per confermare le connessioni
-    client_players.admin.command('ping')
-    client_italiana.admin.command('ping')
-    client_svizzera.admin.command('ping')
-    st.sidebar.success("✅ Connessioni a MongoDB riuscite!")
-except Exception as e:
-    st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
-    st.stop() # Interrompe l'app se la connessione fallisce
+def init_mongo_connections():
+    """Inizializza le connessioni MongoDB con gestione degli errori"""
+    try:
+        client_players = MongoClient(MONGO_URI_PLAYERS, server_api=ServerApi('1'), tlsCAFile=certifi.where())
+        client_italiana = MongoClient(MONGO_URI_TOURNEMENTS, server_api=ServerApi('1'), tlsCAFile=certifi.where())
+        client_svizzera = MongoClient(MONGO_URI_TOURNEMENTS_CH, server_api=ServerApi('1'), tlsCAFile=certifi.where())
+        
+        # Verifica le connessioni
+        client_players.admin.command('ping')
+        client_italiana.admin.command('ping')
+        client_svizzera.admin.command('ping')
+        
+        return client_players, client_italiana, client_svizzera
+    except Exception as e:
+        st.error(f"Errore di connessione a MongoDB: {e}")
+        return None, None, None
 
-# --- Sezione per la gestione dei giocatori ---
+# Mostra la schermata di autenticazione se non si è già autenticati
+if not st.session_state.get('authenticated', False):
+    auth.show_auth_screen()
+    st.stop()
+    
+
+# Inizializza le connessioni MongoDB
+client_players, client_italiana, client_svizzera = init_mongo_connections()
+if None in (client_players, client_italiana, client_svizzera):
+    st.stop()
+
+# Inizializza le collezioni
 db_players = client_players["giocatori_subbuteo"]
 collection_players = db_players["piercrew_players"]
+
+# Inizializza lo stato della sessione
+if 'edit_index' not in st.session_state:
+    st.session_state.edit_index = None
+
+if 'confirm_delete' not in st.session_state:
+    st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
+
+if 'password_check' not in st.session_state:
+    st.session_state.password_check = {"show": False, "password": None, "type": None}
+
+def inject_css():
+    st.markdown("""
+        <style>
+        /* Stili di base */
+        ul, li { 
+            list-style-type: none !important; 
+            padding-left: 0 !important; 
+            margin-left: 0 !important; 
+        }
+        
+        /* Titoli */
+        .big-title { 
+            text-align: center; 
+            font-size: clamp(22px, 4vw, 42px); 
+            font-weight: 800; 
+            margin: 15px 0 10px; 
+            color: #e63946; 
+            text-shadow: 0 1px 2px #0002; 
+        }
+        
+        .sub-title { 
+            font-size: 20px; 
+            font-weight: 700; 
+            margin-top: 10px; 
+            color: #1d3557; 
+        }
+        
+        /* Stile per il titolo principale */
+        .button-title {
+            background: linear-gradient(90deg, #457b9d, #1d3557);
+            color: white !important;
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 4px 14px #00000022;
+            transition: all 0.3s ease;
+            font-size: 2em;
+            font-weight: 700;
+            text-decoration: none !important;
+            display: inline-block;
+            width: 100%;
+        }
+        
+        /* Stili per i pulsanti */
+        .stButton>button { 
+            background: linear-gradient(90deg, #457b9d, #1d3557); 
+            color: white; 
+            border-radius: 10px; 
+            padding: 0.55em 1.0em; 
+            font-weight: 700; 
+            border: 0; 
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover { 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 14px #00000022; 
+        }
+        
+        .stDownloadButton>button { 
+            background: linear-gradient(90deg, #2a9d8f, #21867a); 
+            color: white; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            border: 0; 
+            transition: all 0.3s ease;
+        }
+        
+        .stDownloadButton>button:hover { 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 14px #00000022; 
+        }
+        
+        /* Stili per le tabelle */
+        .stDataFrame { 
+            border: 2px solid #f4a261; 
+            border-radius: 10px; 
+        }
+        
+        /* Stile per i badge */
+        .pill { 
+            display:inline-block; 
+            padding: 4px 10px; 
+            border-radius: 999px; 
+            background:#f1faee; 
+            color:#1d3557; 
+            font-weight:700; 
+            border:1px solid #a8dadc; 
+        }
+        
+        /* Stili per la sidebar */
+        [data-testid="stSidebar"] h3 {
+            color: #0078D4 !important;
+        }
+        
+        /* Stili per i link nella sidebar */
+        [data-testid="stSidebar"] .stLinkButton,
+        [data-testid="stSidebar"] .stLinkButton a,
+        [data-testid="stSidebar"] .stLinkButton a:visited,
+        [data-testid="stSidebar"] .stLinkButton a:hover,
+        [data-testid="stSidebar"] .stLinkButton a:active {
+            background: linear-gradient(90deg, #457b9d, #1d3557) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 10px !important;
+            padding: 0.5rem 1rem !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            text-decoration: none !important;
+            display: inline-block !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            width: 100% !important;
+            margin: 5px 0 !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton:hover,
+        [data-testid="stSidebar"] .stLinkButton a:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton:active,
+        [data-testid="stSidebar"] .stLinkButton a:active {
+            transform: translateY(0) !important;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        /* Stili per il tema scuro */
+        @media (prefers-color-scheme: dark) {
+            [data-testid="stSidebar"] h3,
+            .css-1d391kg h3,
+            [data-testid="stSidebar"] .element-container h3,
+            .css-1d391kg .element-container h3 {
+                color: #ffffff !important;
+                background: none !important;
+            }
+            
+            [data-testid="stSidebar"] h3 {
+                color: white !important;
+            }
+        }
+        
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] h3,
+        .stApp[data-theme="dark"] .css-1d391kg h3,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .element-container h3,
+        .stApp[data-theme="dark"] .css-1d391kg .element-container h3,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] div h3,
+        .stApp[data-theme="dark"] .css-1d391kg div h3,
+        html[data-theme="dark"] [data-testid="stSidebar"] h3,
+        html[data-theme="dark"] .css-1d391kg h3,
+        body[data-theme="dark"] [data-testid="stSidebar"] h3,
+        body[data-theme="dark"] .css-1d391kg h3,
+        [data-testid="stSidebar"] h3[class*="css"],
+        .css-1d391kg h3[class*="css"],
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] * h3,
+        .stApp[data-theme="dark"] .css-1d391kg * h3,
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] .stMarkdown h3,
+        [data-testid="stSidebar"] div h3 {
+            color: #ffffff !important;
+            background: none !important;
+        }
+        
+        /* Stili per i pulsanti nella sidebar con tema scuro */
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton,
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton a,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a {
+            background: linear-gradient(90deg, #1d3557, #457b9d) !important;
+            color: white !important;
+        }
+        
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton:hover,
+        [data-testid="stSidebar"][data-baseweb="dark"] .stLinkButton a:hover,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton:hover,
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a:hover {
+            background: linear-gradient(90deg, #1d3557, #3a6ea5) !important;
+        }
+        
+        /* Stili per dispositivi mobili */
+        @media (max-width: 768px) {
+            .st-emotion-cache-1f84s9j, 
+            .st-emotion-cache-1j0n4k { 
+                flex-direction: row; 
+                justify-content: center; 
+            }
+            .st-emotion-cache-1f84s9j > div, 
+            .st-emotion-cache-1j0n4k > div { 
+                flex: 1; 
+                padding: 0 5px; 
+            }
+        }
+        </style>
+        
+        <script>
+        // Funzione per forzare il colore bianco sui subheader della sidebar
+        function forceWhiteSubheaders() {
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            if (sidebar) {
+                const h3Elements = sidebar.querySelectorAll('h3');
+                h3Elements.forEach(h3 => {
+                    h3.style.color = 'white';
+                    h3.style.setProperty('color', 'white', 'important');
+                });
+            }
+        }
+
+        // Esegui la funzione quando la pagina è caricata
+        document.addEventListener('DOMContentLoaded', forceWhiteSubheaders);
+
+        // Esegui la funzione ogni volta che Streamlit aggiorna il DOM
+        const observer = new MutationObserver(forceWhiteSubheaders);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Esegui immediatamente
+        forceWhiteSubheaders();
+        </script>
+    """, unsafe_allow_html=True)
+
 
 def carica_dati_da_mongo():
     data = list(collection_players.find())
@@ -82,8 +331,85 @@ def salva_tornei_svizzeri(df):
     st.toast("Dati dei tornei svizzeri salvati con successo!")
 
 
-st.set_page_config(page_title="Gestione PierCrew All-in-one", layout="wide")
-st.title("🎲 Gestione del Club e dei Tornei")
+# Mostra la schermata di autenticazione se non si è già autenticati
+if not st.session_state.get('authenticated', False):
+    auth.show_auth_screen()
+    st.stop()
+
+st.set_page_config(
+    page_title="Gestione PierCrew All-in-one", 
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+def reset_app_state():
+    """Resetta lo stato dell'applicazione"""
+    keys_to_reset = [
+        "edit_index", "confirm_delete", "df_giocatori",
+        "df_tornei_italiana", "df_tornei_svizzeri"
+    ]
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
+# Inietta gli stili CSS personalizzati
+inject_css()
+
+# Sidebar / Pagina
+# ✅ 1. 🕹 Gestione Rapida (sempre in cima)
+st.sidebar.subheader("🕹️ Gestione Rapida")
+st.markdown("""
+    <style>
+    /* Stile per i pulsanti */
+    .stButton>button, .stSidebar .stButton>button, .stSidebar .stLinkButton>a {
+        background-color: #0068c9 !important;
+        color: white !important;
+        border: none !important;
+    }
+    
+    /* Stile per gli header della sidebar in linea con Fasi Finali */
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h3[class*="st-emotion-cache"],
+    [data-testid="stSidebar"] h3[class*="css"],
+    [data-testid="stSidebar"] h3[class*="element-container"],
+    [data-testid="stSidebar"] h3[class*="stMarkdown"],
+    [data-testid="stSidebar"] h3[class*="stSubheader"],
+    [data-testid="stSidebar"] h3[class*="stHeadingContainer"],
+    [data-testid="stSidebar"] h3[class*="stTitle"],
+    [data-testid="stSidebar"] .stMarkdown h3,
+    [data-testid="stSidebar"] .element-container h3,
+    [data-testid="stSidebar"] .stSubheader h3 {
+        color: #0068c9 !important;  /* Blu Streamlit */
+        font-weight: 600;
+    }
+    .stSidebar .stLinkButton>a {
+        background-color: #0068c9 !important;
+        color: white !important;
+        text-decoration: none !important;
+        display: block;
+        width: 100%;
+        text-align: center;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Pulsante per l'Hub Tornei
+st.sidebar.link_button(
+    "➡️ Vai a Hub Tornei",
+    "https://farm-tornei-subbuteo-piercrew-all-db.streamlit.app/",
+    use_container_width=True,
+    type="primary"  # Usa lo stile primario di Streamlit
+)
+
+# Sezione debug autenticazione
+if st.sidebar.checkbox("🔍 Mostra debug autenticazione"):
+    from auth_utils import show_debug_messages
+    show_debug_messages()
+
+st.sidebar.markdown("---")
+
+st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)
 
 # Inizializza i dataframe nel session state
 if "df_giocatori" not in st.session_state:
@@ -92,13 +418,6 @@ if "df_tornei_italiana" not in st.session_state:
     st.session_state.df_tornei_italiana = carica_tornei_all_italiana()
 if "df_tornei_svizzeri" not in st.session_state:
     st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
-if "edit_index" not in st.session_state:
-    st.session_state.edit_index = None
-if "confirm_delete" not in st.session_state:
-    st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
-if "password_check" not in st.session_state:
-    st.session_state.password_check = {"show": False, "password": None, "type": None}
-
 
 # Funzioni per la logica dell'app
 def add_player():
@@ -236,11 +555,50 @@ def process_deletion_with_password(password, deletion_type, data):
 
 # Logica di visualizzazione basata sullo stato
 if st.session_state.edit_index is None and st.session_state.confirm_delete["type"] is None:
-    st.header("Gestione Giocatori")
+    st.header("👥Gestione Giocatori")
     st.subheader("Lista giocatori")
+    
+    # Create a copy of the dataframe for editing
     df = st.session_state.df_giocatori.copy()
+    
     if not df.empty:
-        st.dataframe(df, use_container_width=True)
+        # Make the dataframe editable
+        edited_df = st.data_editor(
+            df,
+            disabled=["id"],  # Make the ID column read-only
+            num_rows="dynamic",  # Allow adding/deleting rows
+            use_container_width=True,
+            column_config={
+                "Giocatore": "Giocatore",
+                "Squadra": "Squadra",
+                "Potenziale": st.column_config.NumberColumn("Potenziale", min_value=1, max_value=10, step=1, format="%d")
+            }
+        )
+        
+        # Add save button
+        if st.button("💾 Salva Modifiche Tabella"):
+            st.session_state.show_password_dialog = True
+            
+        # Password dialog
+        if st.session_state.get('show_password_dialog', False):
+            password = st.text_input("Inserisci la password per salvare le modifiche:", type="password")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Conferma Salvataggio"):
+                    if password == "Legnaro72":
+                        # Update the dataframe in session state
+                        st.session_state.df_giocatori = edited_df
+                        # Save to database
+                        salva_dati_su_mongo(edited_df)
+                        st.success("✅ Modifiche salvate con successo!")
+                        st.session_state.show_password_dialog = False
+                        st.rerun()
+                    else:
+                        st.error("❌ Password errata. Le modifiche non sono state salvate.")
+            with col2:
+                if st.button("❌ Annulla"):
+                    st.session_state.show_password_dialog = False
+                    st.rerun()
     else:
         st.info("Nessun giocatore trovato. Aggiungine uno per iniziare!")
 
@@ -264,24 +622,24 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
     st.download_button(
         "📥 Scarica CSV giocatori aggiornato",
         data=csv,
-        file_name="giocatori_PierCrew_modificato.csv",
+        file_name="giocatori_piercrew_modificato.csv",
         mime="text/csv",
     )
 
     # ---
     st.markdown("---")
-    st.header("Gestione Tornei")
+    st.header("🏆Gestione Tornei")
 
     col_del_all_ita, col_del_all_svizz, col_del_all = st.columns(3)
     with col_del_all_ita:
-        st.button("❌ Cancella tutti i tornei all'italiana", on_click=confirm_delete_all_tornei_italiana)
+        st.button("❌ Cancella tutti i tornei all'italiana 🇮🇹", on_click=confirm_delete_all_tornei_italiana)
     with col_del_all_svizz:
-        st.button("❌ Cancella tutti i tornei svizzeri", on_click=confirm_delete_all_tornei_svizzeri)
+        st.button("❌ Cancella tutti i tornei svizzeri 🇨🇭", on_click=confirm_delete_all_tornei_svizzeri)
     with col_del_all:
         st.button("❌ Cancella TUTTI i tornei", on_click=confirm_delete_all_tornei_all)
 
     # Sezione per i tornei all'italiana
-    st.subheader("Tornei all'italiana")
+    st.subheader("🇮🇹 Tornei all'italiana 🇮🇹")
     df_tornei_italiana = st.session_state.df_tornei_italiana.copy()
     if not df_tornei_italiana.empty:
         st.dataframe(df_tornei_italiana[["Torneo"]], use_container_width=True)
@@ -297,7 +655,7 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
     st.markdown("---")
 
     # Sezione per i tornei svizzeri
-    st.subheader("Tornei svizzeri")
+    st.subheader("🇨🇭 Tornei svizzeri 🇨🇭")
     df_tornei_svizzeri = st.session_state.df_tornei_svizzeri.copy()
     if not df_tornei_svizzeri.empty:
         st.dataframe(df_tornei_svizzeri[["Torneo"]], use_container_width=True)
@@ -367,3 +725,7 @@ elif st.session_state.confirm_delete["type"] is not None:
         password = st.text_input("Inserisci la password per confermare", type="password")
         if st.button("Conferma Password"):
             process_deletion_with_password(password, st.session_state.password_check["type"], st.session_state.confirm_delete["data"])
+
+# Footer leggero
+st.markdown("---")
+st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
