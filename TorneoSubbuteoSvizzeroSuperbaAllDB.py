@@ -349,16 +349,16 @@ def salva_torneo_su_db():
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
-@st.cache_data
+@st.cache_data(ttl=300)  # Cache per 5 minuti
 def carica_nomi_tornei_da_db():
     """Carica i nomi dei tornei disponibili dal DB."""
     if tournaments_collection is None:
         return []
     try:
-        tornei = tournaments_collection.find({}, {"nome_torneo": 1}).sort("data_salvataggio", -1)
-        return list(t['nome_torneo'] for t in tornei)
+        # Usiamo distinct per ottenere direttamente la lista dei nomi senza duplicati
+        return sorted(tournaments_collection.distinct("nome_torneo"))
     except Exception as e:
-        st.error(f"❌ Errore caricamento nomi tornei: {e}")
+        st.error(f"❌ Errore caricamento tornei: {e}")
         return []
 
 def carica_torneo_da_db(nome_torneo):
@@ -709,21 +709,36 @@ if "mostra_incontri_disputati" not in st.session_state:
 # -------------------------
 if st.session_state.setup_mode == "carica_db":
     st.markdown("#### 📥 Carica torneo da MongoDB")
-    tornei_disponibili = carica_nomi_tornei_da_db()
+    with st.spinner("Caricamento elenco tornei..."):
+        tornei_disponibili = carica_nomi_tornei_da_db()
+    
     if tornei_disponibili:
-        opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
-        if st.button("Carica Torneo Selezionato 📥", type="primary"):
-            with st.spinner("Caricamento in corso..."):
-                if carica_torneo_da_db(opzione_scelta):
-                    st.balloons()
-                    st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
-                    st.session_state.torneo_finito = False
-                    st.rerun()
+        st.success(f"✅ Trovati {len(tornei_disponibili)} tornei disponibili")
+        opzione_scelta = st.selectbox(
+            "Seleziona il torneo da caricare:", 
+            tornei_disponibili,
+            index=0,
+            key="torneo_selezionato"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Carica Torneo", type="primary", use_container_width=True):
+                with st.spinner(f"Caricamento di '{opzione_scelta}' in corso..."):
+                    if carica_torneo_da_db(opzione_scelta):
+                        st.balloons()
+                        st.success(f"✅ Torneo '{opzione_scelta}' caricato con successo!")
+                        st.session_state.torneo_finito = False
+                        st.rerun()
+        with col2:
+            if st.button("↩️ Torna indietro", use_container_width=True):
+                st.session_state.setup_mode = None
+                st.rerun()
     else:
         st.warning("⚠️ Nessun torneo trovato nel database.")
-    if st.button("↩️ Indietro"):
-        st.session_state.setup_mode = None
-        st.rerun()
+        if st.button("↩️ Torna indietro"):
+            st.session_state.setup_mode = None
+            st.rerun()
 
 if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
