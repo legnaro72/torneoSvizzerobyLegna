@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -6,6 +7,49 @@ from fpdf import FPDF
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from bson.objectid import ObjectId
+import requests
+import base64
+import time
+import urllib.parse
+import os
+
+# Import auth utilities
+import auth_utils as auth
+
+# Mostra la schermata di autenticazione se non si è già autenticati
+if not st.session_state.get('authenticated', False):
+    auth.show_auth_screen()
+    st.stop()
+
+# -------------------------
+# Configurazione della pagina
+# -------------------------
+st.set_page_config(
+    page_title="Torneo Subbuteo - Svizzero",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+def reset_app_state():
+    """Resetta lo stato dell'applicazione"""
+    keys_to_reset = [
+        "df_torneo", "df_squadre", "turno_attivo", "risultati_temp",
+        "nuovo_torneo_step", "club_scelto", "giocatori_selezionati_db",
+        "giocatori_ospiti", "giocatori_totali", "torneo_iniziato",
+        "setup_mode", "torneo_finito", "edited_df_squadre",
+        "gioc_info", "modalita_visualizzazione"
+    ]
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
+# Inizializza lo stato della sessione
+if st.session_state.get('sidebar_state_reset', False):
+    reset_app_state()
+    st.session_state['sidebar_state_reset'] = False
+    st.rerun()
+
 
 # -------------------------
 # Session state (inizializzazione e aggiornamento nome torneo)
@@ -25,7 +69,8 @@ for key, default in {
     "nome_torneo": "Torneo Subbuteo - Sistema Svizzero",
     "torneo_finito": False,
     "edited_df_squadre": pd.DataFrame(),
-    "gioc_info": {}
+    "gioc_info": {},
+    "modalita_visualizzazione": "Squadre"
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -34,7 +79,193 @@ for key, default in {
 if st.session_state.torneo_finito and not st.session_state.nome_torneo.startswith("finito_"):
     st.session_state.nome_torneo = f"finito_{st.session_state.nome_torneo}"
 
-st.set_page_config(page_title=f"⚽ {st.session_state.nome_torneo}", layout="wide")
+# -------------------------
+# CSS personalizzato
+# -------------------------
+st.markdown("""
+<style>
+.stButton>button { 
+    background: linear-gradient(90deg, #457b9d, #1d3557); 
+    color: white; 
+    border-radius: 10px; 
+    padding: 0.55em 1.0em; 
+    font-weight: 700; 
+    border: 0; 
+    box-shadow: 0 4px 14px #00000022;
+}
+.stButton>button:hover { 
+    transform: translateY(-1px); 
+    box-shadow: 0 6px 18px #00000033; 
+}
+.stDownloadButton>button { 
+    background: linear-gradient(90deg, #457b9d, #1d3557); 
+    color: white; 
+    border-radius: 10px; 
+    font-weight: 700; 
+    border: 0; 
+    box-shadow: 0 4px 14px #00000022;
+}
+.stDownloadButton>button:hover { 
+    transform: translateY(-1px); 
+    box-shadow: 0 6px 18px #00000033; 
+}
+        
+        /* Stile per il link button nella sidebar sia per tema chiaro che scuro */
+        [data-testid="stSidebar"] .stLinkButton a {
+            color: white !important;
+            background: linear-gradient(90deg, #457b9d, #1d3557) !important;
+            border-radius: 10px !important;
+            padding: 0.55em 1.0em !important;
+            font-weight: 700 !important;
+            text-decoration: none !important;
+            transition: all 0.2s ease !important;
+            display: inline-block !important;
+            width: 100% !important;
+            text-align: center !important;
+            border: none !important;
+            box-shadow: 0 4px 14px #00000022 !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton a:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 6px 18px #00000033 !important;
+            color: white !important;
+        }
+        
+        [data-testid="stSidebar"] .stLinkButton a:active {
+            transform: translateY(0) !important;
+        }
+        
+        /* Override per il tema scuro */
+        .stApp[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a,
+        html[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a,
+        body[data-theme="dark"] [data-testid="stSidebar"] .stLinkButton a {
+            color: white !important;
+        }
+/* Main content h3 styling - solo per contenuto principale */
+.main .block-container h3 { 
+    color: white; 
+    font-weight: 700;
+    background: linear-gradient(90deg, #457b9d, #1d3557);
+    border-radius: 10px;
+    box-shadow: 0 4px 14px #00000022;
+    padding: 10px;
+    text-align: center;
+}
+/* Sidebar h3 styling - mantiene stile normale */
+.css-1d391kg h3, [data-testid="stSidebar"] h3 {
+    color: #1d3557;
+    font-weight: 700;
+    background: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    text-align: left !important;
+}
+
+/* Tema scuro - sidebar subheaders bianchi con selettori più specifici */
+@media (prefers-color-scheme: dark) {
+    [data-testid="stSidebar"] h3,
+    .css-1d391kg h3,
+    [data-testid="stSidebar"] .element-container h3,
+    .css-1d391kg .element-container h3 {
+        color: #ffffff !important;
+        background: none !important;
+    }
+}
+
+/* Streamlit dark theme - sidebar subheaders bianchi con priorità massima */
+.stApp[data-theme="dark"] [data-testid="stSidebar"] h3,
+.stApp[data-theme="dark"] .css-1d391kg h3,
+.stApp[data-theme="dark"] [data-testid="stSidebar"] .element-container h3,
+.stApp[data-theme="dark"] .css-1d391kg .element-container h3,
+.stApp[data-theme="dark"] [data-testid="stSidebar"] div h3,
+.stApp[data-theme="dark"] .css-1d391kg div h3 {
+    color: #ffffff !important;
+    background: none !important;
+}
+
+/* Selettori ancora più specifici per forzare il bianco sui subheader */
+html[data-theme="dark"] [data-testid="stSidebar"] h3,
+html[data-theme="dark"] .css-1d391kg h3,
+body[data-theme="dark"] [data-testid="stSidebar"] h3,
+body[data-theme="dark"] .css-1d391kg h3 {
+    color: #ffffff !important;
+}
+
+/* Override per tutti i possibili selettori di subheader nella sidebar */
+[data-testid="stSidebar"] h3[class*="css"],
+.css-1d391kg h3[class*="css"] {
+    color: #ffffff !important;
+}
+
+/* CSS con massima specificità per tema scuro */
+.stApp[data-theme="dark"] [data-testid="stSidebar"] * h3,
+.stApp[data-theme="dark"] .css-1d391kg * h3 {
+    color: #ffffff !important;
+}
+
+/* Approccio universale - forza bianco su TUTTI gli h3 della sidebar nel tema scuro */
+@media (prefers-color-scheme: dark) {
+    [data-testid="stSidebar"] h3 {
+        color: white !important;
+    }
+}
+
+.stApp[data-theme="dark"] [data-testid="stSidebar"] h3 {
+    color: white !important;
+}
+
+/* Selettore CSS universale per tutti gli elementi h3 nella sidebar */
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] .stMarkdown h3,
+[data-testid="stSidebar"] div h3 {
+    color: white !important;
+}
+
+/* Forza il colore blu per i subheader della sidebar in entrambi i temi */
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h3[class*="st-emotion-cache"],
+[data-testid="stSidebar"] h3[class*="css"],
+[data-testid="stSidebar"] h3[class*="element-container"],
+[data-testid="stSidebar"] h3[class*="stMarkdown"],
+[data-testid="stSidebar"] h3[class*="stSubheader"],
+[data-testid="stSidebar"] h3[class*="stHeadingContainer"],
+[data-testid="stSidebar"] h3[class*="stTitle"],
+[data-testid="stSidebar"] .stMarkdown h3,
+[data-testid="stSidebar"] .element-container h3,
+[data-testid="stSidebar"] .stSubheader h3,
+[data-testid="stSidebar"] .stHeadingContainer h3,
+[data-testid="stSidebar"] .stTitle h3,
+.stApp[data-theme="light"] [data-testid="stSidebar"] h3,
+.stApp[data-theme="dark"] [data-testid="stSidebar"] h3,
+html[data-theme="light"] [data-testid="stSidebar"] h3,
+html[data-theme="dark"] [data-testid="stSidebar"] h3,
+body[data-theme="light"] [data-testid="stSidebar"] h3,
+body[data-theme="dark"] [data-testid="stSidebar"] h3 {
+    color: #0078D4 !important;
+    font-weight: 700;
+    background: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    text-align: left !important;
+}
+
+/* Rimuovi eventuali stili di hover o focus che potrebbero sovrascrivere */
+[data-testid="stSidebar"] h3:hover,
+[data-testid="stSidebar"] h3:focus,
+[data-testid="stSidebar"] h3:active {
+    color: #0078D4 !important;
+}
+
+/* Forza il colore anche per i temi personalizzati */
+[data-testid="stSidebar"] h3[style*="color"],
+[data-testid="stSidebar"] h3[style*="color"]:hover,
+[data-testid="stSidebar"] h3[style*="color"]:focus {
+    color: #0078D4 !important;
+}
+""", unsafe_allow_html=True)
 
 # -------------------------
 # Connessione a MongoDB Atlas
@@ -42,30 +273,39 @@ st.set_page_config(page_title=f"⚽ {st.session_state.nome_torneo}", layout="wid
 
 players_collection = None
 tournaments_collection = None
-st.info("Tentativo di connessione a MongoDB...")
-try:
-    MONGO_URI=st.secrets["MONGO_URI"]
-    server_api = ServerApi('1')
-    client = MongoClient(MONGO_URI, server_api=server_api)
-    
-    # Connessione per i giocatori
-    db_players = client.get_database("giocatori_subbuteo")
-    players_collection = db_players.get_collection("piercrew_players") 
-    _ = players_collection.find_one()
+with st.spinner("Connessione a MongoDB..."):
+    try:
+        MONGO_URI = st.secrets["MONGO_URI"]
+        server_api = ServerApi('1')
+        client = MongoClient(MONGO_URI, server_api=server_api)
+        
+        # Connessione per i giocatori
+        db_players = client.get_database("giocatori_subbuteo")
+        players_collection = db_players.get_collection("piercrew_players") 
+        _ = players_collection.find_one()
 
-    # Connessione per i tornei (nuovo)
-    db_tournaments = client.get_database("TorneiSubbuteo")
-    tournaments_collection = db_tournaments.get_collection("PierCrewSvizzero")
-    _ = tournaments_collection.find_one()
+        # Connessione per i tornei (nuovo)
+        db_tournaments = client.get_database("TorneiSubbuteo")
+        tournaments_collection = db_tournaments.get_collection("PierCrewSvizzero")
+        _ = tournaments_collection.find_one()
 
-    st.success("✅ Connessione a MongoDB Atlas riuscita.")
-except Exception as e:
-    st.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
+        #st.sidebar.toast("✅ Connessione a MongoDB Atlas riuscita.")
+    except Exception as e:
+        st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
 
 # -------------------------
 # Funzioni di utilità
 # -------------------------
 
+def autoplay_audio(audio_data: bytes):
+    b64 = base64.b64encode(audio_data).decode("utf-8")
+    md = f"""
+        <audio autoplay="true">
+        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+        </audio>
+        """
+    st.markdown(md, unsafe_allow_html=True)
+    
 def salva_torneo_su_db():
     """Salva o aggiorna lo stato del torneo su MongoDB."""
     if tournaments_collection is None:
@@ -82,23 +322,34 @@ def salva_torneo_su_db():
     }
 
     try:
-        # Cerca un torneo esistente con lo stesso nome
-        existing_doc = tournaments_collection.find_one({"nome_torneo": st.session_state.nome_torneo})
-
-        if existing_doc:
-            # Aggiorna il documento esistente
+        # Se abbiamo un ID torneo nella sessione, aggiorniamo quel documento specifico
+        if 'tournament_id' in st.session_state and st.session_state.tournament_id:
             tournaments_collection.update_one(
-                {"_id": existing_doc["_id"]},
+                {"_id": ObjectId(st.session_state.tournament_id)},
                 {"$set": torneo_data}
             )
             st.success(f"✅ Torneo '{st.session_state.nome_torneo}' aggiornato con successo!")
         else:
-            # Crea un nuovo documento
-            tournaments_collection.insert_one(torneo_data)
-            st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+            # Altrimenti cerchiamo un torneo esistente con lo stesso nome
+            existing_doc = tournaments_collection.find_one({"nome_torneo": st.session_state.nome_torneo})
+            
+            if existing_doc:
+                # Aggiorna il documento esistente e salva l'ID nella sessione
+                tournaments_collection.update_one(
+                    {"_id": existing_doc["_id"]},
+                    {"$set": torneo_data}
+                )
+                st.session_state.tournament_id = str(existing_doc["_id"])
+                st.success(f"✅ Torneo esistente '{st.session_state.nome_torneo}' aggiornato con successo!")
+            else:
+                # Crea un nuovo documento e salva l'ID nella sessione
+                result = tournaments_collection.insert_one(torneo_data)
+                st.session_state.tournament_id = str(result.inserted_id)
+                st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
+@st.cache_data
 def carica_nomi_tornei_da_db():
     """Carica i nomi dei tornei disponibili dal DB."""
     if tournaments_collection is None:
@@ -125,6 +376,9 @@ def carica_torneo_da_db(nome_torneo):
             st.session_state.torneo_iniziato = torneo_data.get('torneo_iniziato', False)
             st.session_state.setup_mode = None
             st.session_state.risultati_temp = {}
+            # Salva l'ID del torneo nella sessione
+            st.session_state.tournament_id = str(torneo_data['_id'])
+            # 💡 AGGIUNGI QUESTA RIGA 💡
             if not st.session_state.df_torneo.empty:
                 init_results_temp_from_df(st.session_state.df_torneo)
             return True
@@ -134,7 +388,7 @@ def carica_torneo_da_db(nome_torneo):
     except Exception as e:
         st.error(f"❌ Errore durante il caricamento del torneo: {e}")
         return False
-
+        
 def carica_giocatori_da_db():
     if 'players_collection' in globals() and players_collection is not None:
         try:
@@ -201,7 +455,6 @@ def esporta_pdf(df_torneo, nome_torneo):
     
     classifica = aggiorna_classifica(df_torneo)
     if not classifica.empty:
-        # Aggiungo la classifica in formato tabellare
         pdf.set_font("Arial", "B", 10)
         header = ['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR']
         col_widths = [45, 15, 10, 10, 10, 10, 10, 10, 10]
@@ -223,7 +476,8 @@ def esporta_pdf(df_torneo, nome_torneo):
             pdf.cell(col_widths[8], 8, str(row['DR']), border=1, align='C')
             pdf.ln()
 
-    return pdf.output(dest="S").encode("latin-1")
+    return pdf.output()
+
 
 def aggiorna_classifica(df):
     stats = {}
@@ -271,6 +525,7 @@ def aggiorna_classifica(df):
     df_class = df_class.sort_values(by=['Punti', 'DR', 'GF'], ascending=False).reset_index(drop=True)
     return df_class
 
+@st.cache_data
 def genera_accoppiamenti(classifica, precedenti):
     accoppiamenti = []
     gia_abbinati = set()
@@ -294,21 +549,113 @@ def init_results_temp_from_df(df):
     for _, row in df.iterrows():
         T = row.get('Turno', 1)
         casa = row['Casa']
-        osp = row['Ospite']
-        key_gc = f"gc_{T}_{casa}_{osp}"
-        key_go = f"go_{T}_{casa}_{osp}"
-        key_val = f"val_{T}_{casa}_{osp}"
+        ospite = row['Ospite']
+        key_gc = f"gc_{T}_{casa}_{ospite}"
+        key_go = f"go_{T}_{casa}_{ospite}"
+        key_val = f"val_{T}_{casa}_{ospite}"
         st.session_state.risultati_temp.setdefault(key_gc, int(row.get('GolCasa', 0)))
         st.session_state.risultati_temp.setdefault(key_go, int(row.get('GolOspite', 0)))
         st.session_state.risultati_temp.setdefault(key_val, bool(row.get('Validata', False)))
 
+def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visualizzazione):
+    """Visualizza gli incontri del turno attivo e permette di inserire e validare i risultati."""
+    for i, riga in df_turno_corrente.iterrows():
+        with st.container(border=True):
+            casa = riga['Casa']
+            ospite = riga['Ospite']
+            key_gc = f"gc_{turno_attivo}_{casa}_{ospite}"
+            key_go = f"go_{turno_attivo}_{casa}_{ospite}"
+            key_val = f"val_{turno_attivo}_{casa}_{ospite}"
+            valida_key = f"valida_{turno_attivo}_{casa}_{ospite}"
+
+            # Recupera i dati di squadra e giocatore per la visualizzazione
+            info_casa = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == casa].iloc[0]
+            info_ospite = st.session_state.df_squadre[st.session_state.df_squadre['Squadra'] == ospite].iloc[0]
+
+            nome_squadra_casa = info_casa['Squadra']
+            nome_giocatore_casa = info_casa['Giocatore']
+            nome_squadra_ospite = info_ospite['Squadra']
+            nome_giocatore_ospite = info_ospite['Giocatore']
+            
+            st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita</p>", unsafe_allow_html=True)
+            
+            match_string = ""
+            if modalita_visualizzazione == 'Squadre':
+                match_string = f"{nome_squadra_casa} 🆚 {nome_squadra_ospite}"
+            elif modalita_visualizzazione == 'Giocatori':
+                match_string = f"{nome_giocatore_casa} 🆚 {nome_giocatore_ospite}"
+            elif modalita_visualizzazione == 'Completa':
+                match_string = f"{nome_squadra_casa} ({nome_giocatore_casa}) 🆚 {nome_squadra_ospite} ({nome_giocatore_ospite})"
+                
+            st.markdown(f"<p style='text-align:center; font-weight:bold;'>🏠{match_string}🛫</p>", unsafe_allow_html=True)
+
+            # 💡 MODIFICA QUI 💡
+            # Usa il valore del DataFrame per inizializzare l'input se non è già nello stato temporaneo
+            gol_casa_iniziale = riga.get('GolCasa', 0)
+            gol_ospite_iniziale = riga.get('GolOspite', 0)
+            validata_iniziale = bool(riga.get('Validata', False))
+
+            if key_gc not in st.session_state.risultati_temp:
+                st.session_state.risultati_temp[key_gc] = gol_casa_iniziale
+            if key_go not in st.session_state.risultati_temp:
+                st.session_state.risultati_temp[key_go] = gol_ospite_iniziale
+            if key_val not in st.session_state.risultati_temp:
+                st.session_state.risultati_temp[key_val] = validata_iniziale
+            
+            c_score1, c_score2 = st.columns(2)
+            with c_score1:
+                st.session_state.risultati_temp[key_gc] = st.number_input(
+                    f"Gol {casa}",
+                    min_value=0,
+                    value=st.session_state.risultati_temp[key_gc], # Usa il valore salvato in session_state
+                    key=key_gc,
+                    disabled=st.session_state.risultati_temp.get(key_val, False)
+                )
+            with c_score2:
+                st.session_state.risultati_temp[key_go] = st.number_input(
+                    f"Gol {ospite}",
+                    min_value=0,
+                    value=st.session_state.risultati_temp[key_go], # Usa il valore salvato in session_state
+                    key=key_go,
+                    disabled=st.session_state.risultati_temp.get(key_val, False)
+                )
+            
+            st.markdown("---")
+            validata_checkbox = st.checkbox(
+                "✅ Valida Risultato",
+                value=st.session_state.risultati_temp.get(key_val, False),
+                key=valida_key
+            )
+            
+            # Aggiorna il risultato quando la checkbox cambia stato
+            if validata_checkbox != st.session_state.risultati_temp.get(key_val, False):
+                st.session_state.risultati_temp[key_val] = validata_checkbox
+                if validata_checkbox:
+                    # Salva i risultati nel DataFrame quando viene validato
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
+                    st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
+                    st.success("✅ Risultato validato!")
+                else:
+                    # Rimuovi la validazione se deselezionata
+                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = False
+                    st.session_state.df_torneo.loc[df_turno_corrente.index, 'Validata'] = False
+                    st.info("⚠️ Validazione rimossa")
+                st.rerun()
+            
+            # Mostra stato validazione
+            if st.session_state.risultati_temp.get(key_val, False):
+                st.success("✅ Partita validata!")
+            else:
+                st.warning("⚠️ Partita non ancora validata.")
 
 # -------------------------
 # Header grafico
 # -------------------------
 st.markdown(f"""
-<div style='text-align:center; padding:20px; border-radius:12px; background: linear-gradient(to right, #ffefba, #ffffff);'>
-    <h1 style='color:#0B5FFF;'>⚽ {st.session_state.nome_torneo} 🏆</h1>
+<div style='text-align:center; padding:20px; border-radius:10px; background: linear-gradient(90deg, #457b9d, #1d3557); box-shadow: 0 4px 14px #00000022;'>
+    <h1 style='color:white; font-weight:700; margin:0;'>🇨🇭⚽ {st.session_state.nome_torneo} 🏆🇨🇭</h1>
 </div>
 """, unsafe_allow_html=True)
 
@@ -319,38 +666,43 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
     st.markdown("### Scegli azione 📝")
     c1, c2 = st.columns([1,1])
     with c1:
-        st.markdown(
-            """<div style='background:#f5f8ff; border-radius:8px; padding:18px; text-align:center'>
-                <h2>📂 Carica torneo esistente</h2>
-                <p style='margin:0.2rem 0 1rem 0'>Riprendi un torneo salvato (MongoDB)</p>
-                </div>""",
-            unsafe_allow_html=True,
-        )
-        if st.button("Carica torneo (MongoDB) 📂", key="btn_carica"):
-            st.session_state.setup_mode = "carica_db"
-            st.session_state.torneo_finito = False
-            st.rerun()
+        with st.container(border=True):
+            st.markdown(
+                """<div style='text-align:center'>
+                    <h2>📂 Carica torneo esistente</h2>
+                    <p style='margin:0.2rem 0 1rem 0'>Riprendi un torneo salvato (MongoDB)</p>
+                    </div>""",
+                unsafe_allow_html=True,
+            )
+            if st.button("Carica torneo (MongoDB) 📂", key="btn_carica", use_container_width=True):
+                st.session_state.setup_mode = "carica_db"
+                st.session_state.torneo_finito = False
+                st.rerun()
     with c2:
-        st.markdown(
-            """<div style='background:#fff8e6; border-radius:8px; padding:18px; text-align:center'>
-                <h2>✨ Crea nuovo torneo</h2>
-                <p style='margin:0.2rem 0 1rem 0'>Genera primo turno scegliendo giocatori del Club PierCrew</p>
-                </div>""",
-            unsafe_allow_html=True,
-        )
-        if st.button("Nuovo torneo ✨", key="btn_nuovo"):
-            st.session_state.setup_mode = "nuovo"
-            st.session_state.nuovo_torneo_step = 0
-            st.session_state.giocatori_selezionati_db = []
-            st.session_state.giocatori_ospiti = []
-            st.session_state.giocatori_totali = []
-            st.session_state.club_scelto = "PierCrew"
-            st.session_state.torneo_finito = False
-            st.session_state.edited_df_squadre = pd.DataFrame()
-            st.session_state.gioc_info = {} # Reset del dizionario per la nuova grafica
-            st.rerun()
+        with st.container(border=True):
+            st.markdown(
+                """<div style='text-align:center'>
+                    <h2>✨ Crea nuovo torneo</h2>
+                    <p style='margin:0.2rem 0 1rem 0'>Genera primo turno scegliendo giocatori del Club PierCrew</p>
+                    </div>""",
+                unsafe_allow_html=True,
+            )
+            if st.button("Nuovo torneo ✨", key="btn_nuovo", use_container_width=True):
+                st.session_state.setup_mode = "nuovo"
+                st.session_state.nuovo_torneo_step = 0
+                st.session_state.giocatori_selezionati_db = []
+                st.session_state.giocatori_ospiti = []
+                st.session_state.giocatori_totali = []
+                st.session_state.club_scelto = "PierCrew"
+                st.session_state.torneo_finito = False
+                st.session_state.edited_df_squadre = pd.DataFrame()
+                st.session_state.gioc_info = {} # Reset del dizionario per la nuova grafica
+                st.rerun()
 
     st.markdown("---")
+
+if "mostra_incontri_disputati" not in st.session_state:
+    st.session_state["mostra_incontri_disputati"] = False
 
 # -------------------------
 # Logica di caricamento o creazione torneo
@@ -360,11 +712,13 @@ if st.session_state.setup_mode == "carica_db":
     tornei_disponibili = carica_nomi_tornei_da_db()
     if tornei_disponibili:
         opzione_scelta = st.selectbox("Seleziona il torneo da caricare:", tornei_disponibili)
-        if st.button("Carica Torneo Selezionato 📥"):
-            if carica_torneo_da_db(opzione_scelta):
-                st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
-                st.session_state.torneo_finito = False
-                st.rerun()
+        if st.button("Carica Torneo Selezionato 📥", type="primary"):
+            with st.spinner("Caricamento in corso..."):
+                if carica_torneo_da_db(opzione_scelta):
+                    st.balloons()
+                    st.success("✅ Torneo caricato! Ora puoi continuare da dove eri rimasto.")
+                    st.session_state.torneo_finito = False
+                    st.rerun()
     else:
         st.warning("⚠️ Nessun torneo trovato nel database.")
     if st.button("↩️ Indietro"):
@@ -375,27 +729,29 @@ if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
     if st.session_state.nuovo_torneo_step == 0:
         suffisso = st.text_input("Dai un nome al tuo torneo", value="", placeholder="Es. 'Campionato Invernale'")
-        if st.button("Prossimo passo ➡️", key="next_step_0"):
+        if st.button("Prossimo passo ➡️", key="next_step_0", type="primary"):
             st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero - {suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
             st.session_state.nuovo_torneo_step = 1
             st.rerun()
     elif st.session_state.nuovo_torneo_step == 1:
-        st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
-        st.markdown(f"### Club selezionato: **{st.session_state.club_scelto}**")
-        df_gioc = carica_giocatori_da_db()
-        st.markdown("**Numero partecipanti** (min 2)")
-        num_squadre = st.number_input("Numero partecipanti", min_value=2, max_value=100, value=8, step=1, key="num_partecipanti")
-
-        if not df_gioc.empty:
-            st.session_state.giocatori_selezionati_db = st.multiselect(
-                "Seleziona i giocatori che partecipano al torneo (dal database)",
-                options=df_gioc['Giocatore'].tolist(),
-                default=st.session_state.giocatori_selezionati_db,
-            )
+        st.info(f"**Nome del torneo:** {st.session_state.nome_torneo}")
+        st.markdown("### Selezione partecipanti 👥")
         
+        col_db, col_num = st.columns([2, 1])
+        with col_db:
+            df_gioc = carica_giocatori_da_db()
+            if not df_gioc.empty:
+                st.session_state.giocatori_selezionati_db = st.multiselect(
+                    "Seleziona i giocatori che partecipano (dal database):",
+                    options=df_gioc['Giocatore'].tolist(),
+                    default=st.session_state.giocatori_selezionati_db,
+                )
+        with col_num:
+            num_squadre = st.number_input("Numero totale di partecipanti:", min_value=2, max_value=100, value=max(8, len(st.session_state.giocatori_selezionati_db)), step=1, key="num_partecipanti")
+
         num_mancanti = num_squadre - len(st.session_state.giocatori_selezionati_db)
         if num_mancanti > 0:
-            st.markdown(f"**Mancano {num_mancanti} giocatori per raggiungere il numero totale.**")
+            st.warning(f"⚠️ Mancano **{num_mancanti}** giocatori per raggiungere il numero totale. Aggiungi i nomi dei giocatori ospiti.")
             for i in range(num_mancanti):
                 ospite_name = st.text_input(f"Nome Giocatore Ospite {i+1}", key=f"ospite_player_{i}", value=st.session_state.giocatori_ospiti[i] if i < len(st.session_state.giocatori_ospiti) else "")
                 if i >= len(st.session_state.giocatori_ospiti):
@@ -405,31 +761,36 @@ if st.session_state.setup_mode == "nuovo":
 
         st.session_state.giocatori_totali = st.session_state.giocatori_selezionati_db + [p for p in st.session_state.giocatori_ospiti if p.strip()]
         
-        if st.button("Accetta giocatori ✅", key="next_step_1"):
-            if len(st.session_state.giocatori_totali) != num_squadre:
-                st.error(f"❌ Il numero di giocatori selezionati ({len(st.session_state.giocatori_totali)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
-            else:
-                data_squadre = []
-                giocatori_db_df = carica_giocatori_da_db()
-                for player in st.session_state.giocatori_totali:
-                    if player in giocatori_db_df['Giocatore'].tolist():
-                        player_info = giocatori_db_df[giocatori_db_df['Giocatore'] == player].iloc[0]
-                        squadra = player_info.get('Squadra', player)
-                        potenziale = player_info.get('Potenziale', 0)
-                        data_squadre.append({'Giocatore': player, 'Squadra': squadra, 'Potenziale': potenziale})
-                    else:
-                        data_squadre.append({'Giocatore': player, 'Squadra': player, 'Potenziale': 0})
-                
-                st.session_state.df_squadre = pd.DataFrame(data_squadre)
-                st.session_state.nuovo_torneo_step = 2
+        st.markdown(f"**Partecipanti selezionati:** {len(st.session_state.giocatori_totali)} di {num_squadre}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Accetta giocatori ✅", key="next_step_1", use_container_width=True, type="primary"):
+                if len(st.session_state.giocatori_totali) != num_squadre:
+                    st.error(f"❌ Il numero di giocatori selezionati ({len(st.session_state.giocatori_totali)}) non corrisponde al numero totale di partecipanti ({num_squadre}).")
+                else:
+                    data_squadre = []
+                    giocatori_db_df = carica_giocatori_da_db()
+                    for player in st.session_state.giocatori_totali:
+                        if player in giocatori_db_df['Giocatore'].tolist():
+                            player_info = giocatori_db_df[giocatori_db_df['Giocatore'] == player].iloc[0]
+                            squadra = player_info.get('Squadra', player)
+                            potenziale = player_info.get('Potenziale', 0)
+                            data_squadre.append({'Giocatore': player, 'Squadra': squadra, 'Potenziale': potenziale})
+                        else:
+                            data_squadre.append({'Giocatore': player, 'Squadra': player, 'Potenziale': 0})
+                    
+                    st.session_state.df_squadre = pd.DataFrame(data_squadre)
+                    st.session_state.nuovo_torneo_step = 2
+                    st.rerun()
+
+        with col2:
+            if st.button("↩️ Indietro", use_container_width=True):
+                st.session_state.nuovo_torneo_step = 1
                 st.rerun()
 
-        if st.button("↩️ Indietro"):
-            st.session_state.nuovo_torneo_step = 0
-            st.rerun()
-
     elif st.session_state.nuovo_torneo_step == 2:
-        st.markdown(f"**Nome del torneo:** {st.session_state.nome_torneo}")
+        st.info(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown("### Modifica i nomi delle squadre e il potenziale 📝")
         st.info("Utilizza i campi sottostanti per assegnare una squadra e un potenziale a ogni partecipante.")
         
@@ -467,7 +828,7 @@ if st.session_state.setup_mode == "nuovo":
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Genera calendario ▶️", type="primary"):
+            if st.button("Genera calendario ▶️", type="primary", use_container_width=True):
                 df_squadre_aggiornato = []
                 for gioc, info in st.session_state['gioc_info'].items():
                     df_squadre_aggiornato.append({
@@ -502,73 +863,172 @@ if st.session_state.setup_mode == "nuovo":
                 st.rerun()
 
         with col2:
-            if st.button("↩️ Indietro"):
+            if st.button("↩️ Indietro", use_container_width=True):
                 st.session_state.nuovo_torneo_step = 1
                 st.rerun()
 
 # -------------------------
 # Sidebar
 # -------------------------
-with st.sidebar:
-    st.header("Opzioni Torneo")
-    if st.session_state.torneo_iniziato:
-        st.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
+# ✅ 1. 🕹️ Gestione Rapida (in cima)
+st.sidebar.subheader("🕹️ Gestione Rapida")
+st.sidebar.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-piercrew-all-db.streamlit.app/", use_container_width=True)
+st.sidebar.markdown("---")
 
-        st.markdown("---")
-        if tournaments_collection is not None:
-            if st.button("💾 Salva su DB"):
-                salva_torneo_su_db()
-        st.markdown("---")
-        
-        if st.button("🏁 Termina Torneo"):
-            st.session_state.torneo_iniziato = False
-            st.session_state.setup_mode = None
-            st.session_state.df_torneo = pd.DataFrame()
-            st.session_state.df_squadre = pd.DataFrame()
-            st.session_state.turno_attivo = 0
-            st.session_state.risultati_temp = {}
-            st.session_state.nuovo_torneo_step = 1
-            st.session_state.torneo_finito = False
-            st.success("✅ Torneo terminato. Dati resettati.")
+if st.session_state.torneo_iniziato:
+    #st.sidebar.info(f"Torneo in corso: **{st.session_state.nome_torneo}**")
+    
+    # ✅ 2. ⚙️ Opzioni Torneo
+    st.sidebar.subheader("⚙️ Opzioni Torneo")
+    if tournaments_collection is not None:
+        if st.sidebar.button("💾 Salva Torneo", key="save_tournament", use_container_width=True):
+            salva_torneo_su_db()
+            st.sidebar.success("✅ Torneo salvato su DB!")
+
+    if st.sidebar.button("🏁 Termina Torneo", key="reset_app", use_container_width=True):
+        salva_torneo_su_db()
+        st.session_state.torneo_iniziato = False
+        st.session_state.setup_mode = None
+        st.session_state.df_torneo = pd.DataFrame()
+        st.session_state.df_squadre = pd.DataFrame()
+        st.session_state.turno_attivo = 0
+        st.session_state.risultati_temp = {}
+        st.session_state.nuovo_torneo_step = 1
+        st.session_state.torneo_finito = False
+        st.sidebar.success("✅ Torneo terminato. Dati resettati.")
+        st.rerun()
+
+    st.sidebar.markdown("---")
+
+    # ✅ 3. 🔧 Utility (sezione principale con sottosezioni)
+    st.sidebar.subheader("🔧 Utility")
+    
+    # 🔎 Visualizzazione incontri
+    with st.sidebar.expander("🔎 Visualizzazione incontri", expanded=False):
+        st.session_state.modalita_visualizzazione = st.radio(
+            "Formato incontri:",
+            options=["Squadre", "Giocatori", "Completa"],
+            index=["Squadre", "Giocatori", "Completa"].index(st.session_state.modalita_visualizzazione),
+            key="radio_sidebar"
+        )
+    
+    # 📅 Visualizzazione incontri giocati
+    with st.sidebar.expander("📅 Visualizzazione incontri giocati", expanded=False):
+        if st.button("📋 Mostra tutti gli incontri disputati", key="btn_mostra_tutti_incontri", use_container_width=True):
+            st.session_state["mostra_incontri_disputati"] = True
             st.rerun()
+
+    st.sidebar.markdown("---")
+
+    # ✅ 4. 📤 Esportazione (in fondo)
+    st.sidebar.subheader("📤 Esportazione")
+    if st.sidebar.button("📄 Prepara PDF", key="prepare_pdf", use_container_width=True):
+        pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+        st.sidebar.download_button(
+            label="📥 Scarica PDF Torneo",
+            data=pdf_bytes,
+            file_name=f"torneo_{st.session_state.nome_torneo}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+else:
+    st.sidebar.info("ℹ️ Nessun torneo attivo. Avvia un torneo per generare il PDF.")
 
 # -------------------------
 # Interfaccia Utente Torneo
 # -------------------------
 if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
-    st.markdown(f"### Turno {st.session_state.turno_attivo}")
+    if st.session_state["mostra_incontri_disputati"]:
+        st.markdown("## 🏟️ Tutti gli incontri disputati")
+        df_giocati = st.session_state.df_torneo[st.session_state.df_torneo['Validata'] == True]
+        
+        if not df_giocati.empty:
+            # Add some CSS for the table
+            st.markdown("""
+            <style>
+            .compact-table {
+                font-size: 0.9em;
+                width: auto !important;
+                border-collapse: collapse;
+            }
+            .compact-table th, .compact-table td {
+                padding: 2px 6px !important;
+                text-align: center !important;
+                white-space: nowrap;
+                border: none;
+            }
+            .compact-table th {
+                color: #333 !important;
+                font-weight: bold;
+                border-bottom: 1px solid #ddd;
+            }
+            .compact-table tr {
+                border-bottom: 1px solid #eee;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # Generate the HTML table
+            table_html = "<table class='compact-table'><thead><tr>"
+            headers = ["📅", "🏠", "⚽️", "⚽️", "🛫"]
+            for header in headers:
+                table_html += f"<th>{header}</th>"
+            table_html += "</tr></thead><tbody>"
+            
+            # Add table rows
+            for _, match in df_giocati.iterrows():
+                table_html += "<tr>"
+                # Column 1: Round with number emoji
+                turno_num = match['Turno']
+                # Map numbers to emojis
+                num_to_emoji = {
+                    0: "0️⃣", 1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 
+                    4: "4️⃣", 5: "5️⃣", 6: "6️⃣", 
+                    7: "7️⃣", 8: "8️⃣", 9: "9️⃣"
+                }
+                # Get emoji for the turn number, default to 🔵 if not a single digit
+                if isinstance(turno_num, (int, float)) and 0 <= turno_num <= 9:
+                    turno_emoji = num_to_emoji[int(turno_num)]
+                else:
+                    turno_emoji = "🔵"  # Default for unknown turn numbers
+                table_html += f"<td style='font-weight: bold; text-align: center;'>{turno_emoji}</td>"
+                
+                # Column 2: Home team
+                table_html += f"<td style='text-align: right;'>{match['Casa']}</td>"
+                
+                # Column 3: Home goals
+                gol_casa = match['GolCasa'] if pd.notna(match['GolCasa']) else "-"
+                table_html += f"<td style='font-weight: bold; text-align: center;'>{gol_casa}</td>"
+                
+                # Column 4: Away goals
+                gol_ospite = match['GolOspite'] if pd.notna(match['GolOspite']) else "-"
+                table_html += f"<td style='font-weight: bold; text-align: center;'>{gol_ospite}</td>"
+                
+                # Column 5: Away team
+                table_html += f"<td style='text-align: left;'>{match['Ospite']}</td>"
+                
+                table_html += "</tr>"
+                
+            table_html += "</tbody></table>"
+            st.markdown(table_html, unsafe_allow_html=True)
+        else:
+            st.info("Nessun incontro validato al momento.")
+            
+        # Pulsante per chiudere la tabella e tornare alla vista classica
+        if st.button("🔙 Torna alla vista classica", key="btn_chiudi_incontri", use_container_width=True):
+            st.session_state["mostra_incontri_disputati"] = False
+            st.rerun()
+    else:
+        st.markdown(f"### Turno {st.session_state.turno_attivo}")
+    
+    
     df_turno_corrente = st.session_state.df_torneo[st.session_state.df_torneo['Turno'] == st.session_state.turno_attivo].copy()
     
     if df_turno_corrente.empty:
         st.warning("⚠️ Non ci sono partite in questo turno. Torna indietro per aggiungere giocatori o carica un altro torneo.")
     else:
-        for i, riga in df_turno_corrente.iterrows():
-            with st.container(border=True):
-                st.markdown(f"<p style='text-align:center; font-size:1.2rem; font-weight:bold;'>⚽ Partita</p>", unsafe_allow_html=True)
-                casa = riga['Casa']
-                ospite = riga['Ospite']
-                key_gc = f"gc_{st.session_state.turno_attivo}_{casa}_{ospite}"
-                key_go = f"go_{st.session_state.turno_attivo}_{casa}_{ospite}"
-                key_val = f"val_{st.session_state.turno_attivo}_{casa}_{ospite}"
-                
-                valida_key = f"valida_{st.session_state.turno_attivo}_{casa}_{ospite}"
-                
-                st.markdown(f"<p style='text-align:center; font-weight:bold;'>{casa} - {ospite}</p>", unsafe_allow_html=True)
-                
-                c_score1, c_score2 = st.columns(2)
-                with c_score1:
-                    st.session_state.risultati_temp[key_gc] = st.number_input(f"Gol {casa}", min_value=0, key=key_gc, disabled=st.session_state.risultati_temp.get(key_val, False))
-                with c_score2:
-                    st.session_state.risultati_temp[key_go] = st.number_input(f"Gol {ospite}", min_value=0, key=key_go, disabled=st.session_state.risultati_temp.get(key_val, False))
-                
-                if st.button("Valida Risultato ✅", key=valida_key, disabled=st.session_state.risultati_temp.get(key_val, False)):
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
-                    st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
-                    st.session_state.risultati_temp[key_val] = True
-                    st.success("✅ Risultato validato!")
-                    st.rerun()
+        # Passa il nuovo parametro alla funzione
+        visualizza_incontri_attivi(df_turno_corrente, st.session_state.turno_attivo, st.session_state.modalita_visualizzazione)
 
     st.markdown("---")
     
@@ -606,20 +1066,7 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
         else:
             st.warning("⚠️ Per generare il prossimo turno, devi validare tutti i risultati.")
 
-# -------------------------
-# Esportazione
-# -------------------------
-if st.session_state.torneo_iniziato and not st.session_state.df_torneo.empty:
-    pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
-    file_name_pdf = f"{st.session_state.nome_torneo.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     
-    st.sidebar.download_button(
-        label="⬇️ Esporta torneo in PDF",
-        data=pdf_bytes,
-        file_name=file_name_pdf,
-        mime="application/pdf"
-    )
-        
 # -------------------------
 # Banner vincitore
 # -------------------------
@@ -643,3 +1090,35 @@ if st.session_state.torneo_finito:
                 🏆 Il vincitore del torneo {st.session_state.nome_torneo} è {vincitore}! 🎉
              </div>
              """, unsafe_allow_html=True)
+        st.balloons()
+        # we are the champions
+        # Codice corretto per scaricare l'audio dall'URL
+        audio_url = "https://raw.githubusercontent.com/legnaro72/torneo-Subbuteo-webapp/main/docs/wearethechamp.mp3"
+        #audio_url = "./wearethechamp.mp3"
+        try:
+            response = requests.get(audio_url, timeout=10) # Imposta un timeout
+            response.raise_for_status() # Lancia un'eccezione per risposte HTTP errate
+            autoplay_audio(response.content)
+        except requests.exceptions.RequestException as e:
+            st.error(f"Errore durante lo scaricamento dell'audio: {e}")
+
+        # Crea un contenitore vuoto per i messaggi
+        placeholder = st.empty()
+
+        # Lancia i palloncini in un ciclo per 3 secondi
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+        
+        with placeholder.container():
+            st.balloons()
+            time.sleep(1) # Aspetta 1 secondo
+# Footer leggero
+st.markdown("---")
+st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
+
+# Non è necessario il blocco if __name__ == "__main__" in un'app Streamlit
