@@ -10,12 +10,46 @@ from bson.objectid import ObjectId
 import requests
 import base64
 import time
+import urllib.parse
+import os
 
 # Import auth utilities
-from auth_utils import show_auth_screen, verify_write_access
+import auth_utils as auth
 
-# Mostra la schermata di autenticazione all'avvio
-show_auth_screen()
+# Mostra la schermata di autenticazione se non si è già autenticati
+if not st.session_state.get('authenticated', False):
+    auth.show_auth_screen()
+    st.stop()
+
+# -------------------------
+# Configurazione della pagina
+# -------------------------
+st.set_page_config(
+    page_title="Torneo Subbuteo - Svizzero",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+def reset_app_state():
+    """Resetta lo stato dell'applicazione"""
+    keys_to_reset = [
+        "df_torneo", "df_squadre", "turno_attivo", "risultati_temp",
+        "nuovo_torneo_step", "club_scelto", "giocatori_selezionati_db",
+        "giocatori_ospiti", "giocatori_totali", "torneo_iniziato",
+        "setup_mode", "torneo_finito", "edited_df_squadre",
+        "gioc_info", "modalita_visualizzazione"
+    ]
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
+# Inizializza lo stato della sessione
+if st.session_state.get('sidebar_state_reset', False):
+    reset_app_state()
+    st.session_state['sidebar_state_reset'] = False
+    st.rerun()
+
 
 # -------------------------
 # Session state (inizializzazione e aggiornamento nome torneo)
@@ -44,8 +78,6 @@ for key, default in {
 # Aggiornamento del nome del torneo se è finito
 if st.session_state.torneo_finito and not st.session_state.nome_torneo.startswith("finito_"):
     st.session_state.nome_torneo = f"finito_{st.session_state.nome_torneo}"
-
-st.set_page_config(page_title=f"⚽ {st.session_state.nome_torneo}", layout="wide")
 
 # -------------------------
 # CSS personalizzato
@@ -1085,6 +1117,9 @@ if st.session_state.torneo_finito:
         with placeholder.container():
             st.balloons()
             time.sleep(1) # Aspetta 1 secondo
+if __name__ == "__main__":
+    main()
+
 # Footer leggero
 st.markdown("---")
 st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")

@@ -2,36 +2,56 @@ import streamlit as st
 import pandas as pd
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import certifi
 
 # Import auth utilities
-from auth_utils import show_auth_screen, verify_write_access
-
-# Mostra la schermata di autenticazione all'avvio
-show_auth_screen()
+import auth_utils as auth
 
 # Dati di connessione a MongoDB forniti dall'utente
 MONGO_URI_PLAYERS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI_TOURNEMENTS_CH = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
 
-# Crea tre connessioni separate come richiesto
-try:
-    client_players = MongoClient(MONGO_URI_PLAYERS, server_api=ServerApi('1'))
-    client_italiana = MongoClient(MONGO_URI_TOURNEMENTS, server_api=ServerApi('1'))
-    client_svizzera = MongoClient(MONGO_URI_TOURNEMENTS_CH, server_api=ServerApi('1'))
-    
-    # Invia un ping a ciascun client per confermare le connessioni
-    client_players.admin.command('ping')
-    client_italiana.admin.command('ping')
-    client_svizzera.admin.command('ping')
-    #st.sidebar.success("✅ Connessioni a MongoDB riuscite!")
-except Exception as e:
-    st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
-    st.stop() # Interrompe l'app se la connessione fallisce
+def init_mongo_connections():
+    """Inizializza le connessioni MongoDB con gestione degli errori"""
+    try:
+        client_players = MongoClient(MONGO_URI_PLAYERS, server_api=ServerApi('1'), tlsCAFile=certifi.where())
+        client_italiana = MongoClient(MONGO_URI_TOURNEMENTS, server_api=ServerApi('1'), tlsCAFile=certifi.where())
+        client_svizzera = MongoClient(MONGO_URI_TOURNEMENTS_CH, server_api=ServerApi('1'), tlsCAFile=certifi.where())
+        
+        # Verifica le connessioni
+        client_players.admin.command('ping')
+        client_italiana.admin.command('ping')
+        client_svizzera.admin.command('ping')
+        
+        return client_players, client_italiana, client_svizzera
+    except Exception as e:
+        st.error(f"Errore di connessione a MongoDB: {e}")
+        return None, None, None
 
-# --- Sezione per la gestione dei giocatori ---
+# Mostra la schermata di autenticazione se non si è già autenticati
+if not st.session_state.get('authenticated', False):
+    auth.show_auth_screen()
+    st.stop()
+
+# Inizializza le connessioni MongoDB
+client_players, client_italiana, client_svizzera = init_mongo_connections()
+if None in (client_players, client_italiana, client_svizzera):
+    st.stop()
+
+# Inizializza le collezioni
 db_players = client_players["giocatori_subbuteo"]
 collection_players = db_players["superba_players"]
+
+# Inizializza lo stato della sessione
+if 'edit_index' not in st.session_state:
+    st.session_state.edit_index = None
+
+if 'confirm_delete' not in st.session_state:
+    st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
+
+if 'password_check' not in st.session_state:
+    st.session_state.password_check = {"show": False, "password": None, "type": None}
 
 def inject_css():
     st.markdown("""
@@ -310,7 +330,27 @@ def salva_tornei_svizzeri(df):
     st.toast("Dati dei tornei svizzeri salvati con successo!")
 
 
-st.set_page_config(page_title="Gestione Superba All-in-one", layout="wide")
+# Mostra la schermata di autenticazione se non si è già autenticati
+if not st.session_state.get('authenticated', False):
+    auth.show_auth_screen()
+    st.stop()
+
+st.set_page_config(
+    page_title="Gestione Superba All-in-one", 
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+def reset_app_state():
+    """Resetta lo stato dell'applicazione"""
+    keys_to_reset = [
+        "edit_index", "confirm_delete", "df_giocatori",
+        "df_tornei_italiana", "df_tornei_svizzeri"
+    ]
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
 
 # Inietta gli stili CSS personalizzati
 inject_css()
@@ -318,7 +358,48 @@ inject_css()
 # Sidebar / Pagina
 # ✅ 1. 🕹 Gestione Rapida (sempre in cima)
 st.sidebar.subheader("🕹️ Gestione Rapida")
-st.sidebar.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-superba-all-db.streamlit.app/", use_container_width=True)
+st.markdown("""
+    <style>
+    /* Stile per i pulsanti */
+    .stButton>button, .stSidebar .stButton>button, .stSidebar .stLinkButton>a {
+        background-color: #0068c9 !important;
+        color: white !important;
+        border: none !important;
+    }
+    
+    /* Stile per gli header della sidebar in linea con Fasi Finali */
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h3[class*="st-emotion-cache"],
+    [data-testid="stSidebar"] h3[class*="css"],
+    [data-testid="stSidebar"] h3[class*="element-container"],
+    [data-testid="stSidebar"] h3[class*="stMarkdown"],
+    [data-testid="stSidebar"] h3[class*="stSubheader"],
+    [data-testid="stSidebar"] h3[class*="stHeadingContainer"],
+    [data-testid="stSidebar"] h3[class*="stTitle"],
+    [data-testid="stSidebar"] .stMarkdown h3,
+    [data-testid="stSidebar"] .element-container h3,
+    [data-testid="stSidebar"] .stSubheader h3 {
+        color: #0068c9 !important;  /* Blu Streamlit */
+        font-weight: 600;
+    }
+    .stSidebar .stLinkButton>a {
+        background-color: #0068c9 !important;
+        color: white !important;
+        text-decoration: none !important;
+        display: block;
+        width: 100%;
+        text-align: center;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Pulsante per l'Hub Tornei
+st.sidebar.link_button(
+    "➡️ Vai a Hub Tornei",
+    "https://farm-tornei-subbuteo-superba-all-db.streamlit.app/",
+    use_container_width=True,
+    type="primary"  # Usa lo stile primario di Streamlit
+)
 st.sidebar.markdown("---")
 
 st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)
@@ -330,13 +411,6 @@ if "df_tornei_italiana" not in st.session_state:
     st.session_state.df_tornei_italiana = carica_tornei_all_italiana()
 if "df_tornei_svizzeri" not in st.session_state:
     st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
-if "edit_index" not in st.session_state:
-    st.session_state.edit_index = None
-if "confirm_delete" not in st.session_state:
-    st.session_state.confirm_delete = {"type": None, "data": None, "password_required": False}
-if "password_check" not in st.session_state:
-    st.session_state.password_check = {"show": False, "password": None, "type": None}
-
 
 # Funzioni per la logica dell'app
 def add_player():
