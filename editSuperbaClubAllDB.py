@@ -451,11 +451,23 @@ def confirm_delete_player(idx, selected_player):
     st.rerun()
 
 def confirm_delete_torneo_italiana(selected_tornei):
-    st.session_state.confirm_delete = {"type": "tornei_ita", "data": selected_tornei, "password_required": True}
+    # Controlla se si sta cercando di eliminare un torneo che inizia con 'Campionato'
+    password_required = any(isinstance(t, str) and t.startswith("Campionato") for t in selected_tornei)
+    st.session_state.confirm_delete = {
+        "type": "tornei_ita", 
+        "data": selected_tornei, 
+        "password_required": password_required
+    }
     st.rerun()
 
 def confirm_delete_torneo_svizzero(selected_tornei):
-    st.session_state.confirm_delete = {"type": "tornei_svizz", "data": selected_tornei, "password_required": True}
+    # Controlla se si sta cercando di eliminare un torneo che inizia con 'Campionato'
+    password_required = any(isinstance(t, str) and t.startswith("Campionato") for t in selected_tornei)
+    st.session_state.confirm_delete = {
+        "type": "tornei_svizz", 
+        "data": selected_tornei, 
+        "password_required": password_required
+    }
     st.rerun()
     
 def confirm_delete_all_tornei_italiana():
@@ -477,12 +489,18 @@ def cancel_delete():
     st.rerun()
 
 def process_deletion_with_password(password, deletion_type, data):
-    # Determine password based on deletion type
-    if deletion_type in ["player", "tornei_ita", "tornei_svizz"]:
-        correct_password = "SuperbaPwd"
-    elif deletion_type in ["all_ita", "all_svizz", "all"]:
+    # Non richiedere la password per l'eliminazione di tornei singoli
+    if deletion_type in ["tornei_ita", "tornei_svizz"]:
+        correct_password = password  # Accetta qualsiasi password
+    # Richiedi la password solo per l'eliminazione di tutti i tornei o tornei che iniziano con 'Campionato'
+    elif deletion_type in ["all_ita", "all_svizz", "all"] or \
+         (isinstance(data, tuple) and len(data) > 1 and data[1].startswith("Campionato")):
         correct_password = "Legnaro72"
     else:
+        # Per le altre operazioni non è richiesta password
+        correct_password = password  # Accetta qualsiasi password
+    
+    if deletion_type not in ["player", "tornei_ita", "tornei_svizz", "all_ita", "all_svizz", "all"]:
         st.error("Tipo di cancellazione non valido.")
         return
 
@@ -714,17 +732,27 @@ elif st.session_state.confirm_delete["type"] is not None:
         st.warning("Sei sicuro di voler eliminare TUTTI i tornei? I tornei che contengono la parola 'campionato' nel nome non verranno eliminati.")
 
     col_confirm, col_cancel = st.columns(2)
-    with col_confirm:
-        if st.button("Conferma e procedi"):
-            st.session_state.password_check["show"] = True
-            st.session_state.password_check["type"] = deletion_type
-    with col_cancel:
-        st.button("❌ Annulla", on_click=cancel_delete)
     
-    if st.session_state.password_check["show"]:
-        password = st.text_input("Inserisci la password per confermare", type="password")
-        if st.button("Conferma Password"):
-            process_deletion_with_password(password, st.session_state.password_check["type"], st.session_state.confirm_delete["data"])
+    # Mostra la richiesta di password solo se richiesta per questo tipo di operazione
+    if st.session_state.confirm_delete["password_required"]:
+        with col_confirm:
+            if st.button("Conferma e procedi"):
+                st.session_state.password_check["show"] = True
+                st.session_state.password_check["type"] = deletion_type
+        with col_cancel:
+            st.button("❌ Annulla", on_click=cancel_delete)
+        
+        if st.session_state.password_check["show"]:
+            password = st.text_input("Inserisci la password per confermare", type="password")
+            if st.button("Conferma Password"):
+                process_deletion_with_password(password, st.session_state.password_check["type"], st.session_state.confirm_delete["data"])
+    else:
+        # Se non è richiesta la password, procedi direttamente con la conferma
+        with col_confirm:
+            if st.button("Conferma eliminazione"):
+                process_deletion_with_password("", deletion_type, st.session_state.confirm_delete["data"])
+        with col_cancel:
+            st.button("❌ Annulla", on_click=cancel_delete)
 
 # Footer leggero
 st.markdown("---")
