@@ -1117,9 +1117,8 @@ if st.session_state.torneo_finito:
         with placeholder.container():
             st.balloons()
             time.sleep(1) # Aspetta 1 secondo
-if __name__ == "__main__":
-    main()
-
 # Footer leggero
 st.markdown("---")
 st.caption("⚽ Subbuteo Tournament Manager •  Made by Legnaro72")
+
+# Non è necessario il blocco if __name__ == "__main__" in un'app Streamlit
