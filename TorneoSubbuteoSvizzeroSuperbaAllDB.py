@@ -417,66 +417,92 @@ def carica_giocatori_da_db():
         return pd.DataFrame()
 
 def esporta_pdf(df_torneo, nome_torneo):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
-
-    titolo = nome_torneo.encode("latin-1", "ignore").decode("latin-1")
-    pdf.cell(0, 10, titolo, ln=True, align="C")
-
-    pdf.set_font("Arial", "", 11)
-    turno_corrente = None
-    for _, r in df_torneo.sort_values(by="Turno").iterrows():
-        if turno_corrente != r["Turno"]:
-            turno_corrente = r["Turno"]
-            pdf.ln(5)
-            pdf.set_font("Arial", "B", 12)
-            pdf.cell(0, 8, f"Turno {turno_corrente}", ln=True)
-            pdf.set_font("Arial", "", 11)
-
-        casa = str(r["Casa"])
-        osp = str(r["Ospite"])
-        gc = str(r["GolCasa"])
-        go = str(r["GolOspite"])
-        match_text = f"{casa} {gc} - {go} {osp}"
-        match_text = match_text.encode("latin-1", "ignore").decode("latin-1")
-
-        if bool(r["Validata"]):
-            pdf.set_text_color(0, 128, 0)
-        else:
-            pdf.set_text_color(255, 0, 0)
-
-        pdf.cell(0, 8, match_text, ln=True)
-
-    pdf.ln(10)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 8, "Classifica attuale", ln=True)
-    
-    classifica = aggiorna_classifica(df_torneo)
-    if not classifica.empty:
-        pdf.set_font("Arial", "B", 10)
-        header = ['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR']
-        col_widths = [45, 15, 10, 10, 10, 10, 10, 10, 10]
+    try:
+        pdf = FPDF()
+        pdf.add_page()
         
-        for i, h in enumerate(header):
-            pdf.cell(col_widths[i], 8, h, border=1, ln=0, align='C')
-        pdf.ln()
+        # Titolo del torneo
+        pdf.set_font("Arial", "B", 16)
+        titolo = nome_torneo.encode("latin-1", "ignore").decode("latin-1")
+        pdf.cell(0, 15, titolo, ln=True, align="C")
+        
+        # Data di generazione
+        pdf.set_font("Arial", "I", 10)
+        pdf.cell(0, 8, f"Generato il: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+        pdf.ln(10)
 
-        pdf.set_font("Arial", "", 10)
-        for _, row in classifica.iterrows():
-            pdf.cell(col_widths[0], 8, str(row['Squadra']).encode("latin-1", "ignore").decode("latin-1"), border=1)
-            pdf.cell(col_widths[1], 8, str(row['Punti']), border=1, align='C')
-            pdf.cell(col_widths[2], 8, str(row['G']), border=1, align='C')
-            pdf.cell(col_widths[3], 8, str(row['V']), border=1, align='C')
-            pdf.cell(col_widths[4], 8, str(row['N']), border=1, align='C')
-            pdf.cell(col_widths[5], 8, str(row['P']), border=1, align='C')
-            pdf.cell(col_widths[6], 8, str(row['GF']), border=1, align='C')
-            pdf.cell(col_widths[7], 8, str(row['GS']), border=1, align='C')
-            pdf.cell(col_widths[8], 8, str(row['DR']), border=1, align='C')
+        # Sezione Partite
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Partite", ln=True)
+        pdf.set_font("Arial", "", 11)
+        
+        turno_corrente = None
+        for _, r in df_torneo.sort_values(by="Turno").iterrows():
+            if turno_corrente != r["Turno"]:
+                turno_corrente = r["Turno"]
+                pdf.ln(5)
+                pdf.set_font("Arial", "B", 12)
+                pdf.cell(0, 8, f"Turno {turno_corrente}", ln=True)
+                pdf.set_font("Arial", "", 11)
+
+            casa = str(r["Casa"])
+            osp = str(r["Ospite"])
+            gc = str(r["GolCasa"])
+            go = str(r["GolOspite"])
+            
+            # Gestione caratteri speciali
+            casa = casa.encode("latin-1", "ignore").decode("latin-1")
+            osp = osp.encode("latin-1", "ignore").decode("latin-1")
+            
+            match_text = f"{casa} {gc} - {go} {osp}"
+            
+            # Colore in base allo stato della partita
+            if bool(r.get("Validata", False)):
+                pdf.set_text_color(0, 100, 0)  # Verde scuro per partite validate
+            else:
+                pdf.set_text_color(128, 128, 128)  # Grigio per partite non validate
+            
+            pdf.cell(0, 8, match_text, ln=True)
+
+        # Sezione Classifica
+        pdf.ln(15)
+        pdf.set_text_color(0, 0, 0)  # Ripristina il colore nero
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Classifica", ln=True)
+        
+        classifica = aggiorna_classifica(df_torneo)
+        if not classifica.empty:
+            # Intestazione tabella
+            pdf.set_font("Arial", "B", 10)
+            header = ['Pos', 'Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR']
+            col_widths = [12, 50, 12, 8, 8, 8, 8, 8, 8, 8]
+            
+            # Intestazione con bordi
+            for i, h in enumerate(header):
+                pdf.cell(col_widths[i], 8, h, border=1, align='C')
             pdf.ln()
 
-    return pdf.output()
+            # Dettagli classifica
+            pdf.set_font("Arial", "", 10)
+            for idx, (_, row) in enumerate(classifica.iterrows(), 1):
+                pdf.cell(col_widths[0], 8, str(idx), border=1, align='C')
+                pdf.cell(col_widths[1], 8, str(row['Squadra']).encode("latin-1", "ignore").decode("latin-1"), border=1)
+                pdf.cell(col_widths[2], 8, str(row['Punti']), border=1, align='C')
+                pdf.cell(col_widths[3], 8, str(row['G']), border=1, align='C')
+                pdf.cell(col_widths[4], 8, str(row['V']), border=1, align='C')
+                pdf.cell(col_widths[5], 8, str(row['N']), border=1, align='C')
+                pdf.cell(col_widths[6], 8, str(row['P']), border=1, align='C')
+                pdf.cell(col_widths[7], 8, str(row['GF']), border=1, align='C')
+                pdf.cell(col_widths[8], 8, str(row['GS']), border=1, align='C')
+                pdf.cell(col_widths[9], 8, str(row['DR']), border=1, align='C')
+                pdf.ln()
+
+        # Genera il PDF in memoria
+        return pdf.output(dest='S').encode('latin-1')
+        
+    except Exception as e:
+        st.error(f"Errore durante la generazione del PDF: {str(e)}")
+        return None
 
 
 def aggiorna_classifica(df):
@@ -938,14 +964,19 @@ if st.session_state.torneo_iniziato:
     # ✅ 4. 📤 Esportazione (in fondo)
     st.sidebar.subheader("📤 Esportazione")
     if st.sidebar.button("📄 Prepara PDF", key="prepare_pdf", use_container_width=True):
-        pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
-        st.sidebar.download_button(
-            label="📥 Scarica PDF Torneo",
-            data=pdf_bytes,
-            file_name=f"torneo_{st.session_state.nome_torneo}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+        with st.spinner("Generazione PDF in corso..."):
+            pdf_bytes = esporta_pdf(st.session_state.df_torneo, st.session_state.nome_torneo)
+            if pdf_bytes:
+                st.sidebar.success("✅ PDF pronto per il download!")
+                st.sidebar.download_button(
+                    label="📥 Scarica PDF Torneo",
+                    data=pdf_bytes,
+                    file_name=f"{st.session_state.nome_torneo}.pdf".replace(" ", "_"),
+                    mime="application/octet-stream",
+                    use_container_width=True
+                )
+            else:
+                st.sidebar.error("❌ Errore durante la generazione del PDF")
 else:
     st.sidebar.info("ℹ️ Nessun torneo attivo. Avvia un torneo per generare il PDF.")
 
