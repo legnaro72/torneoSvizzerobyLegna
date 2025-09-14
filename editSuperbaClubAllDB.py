@@ -33,6 +33,7 @@ def init_mongo_connections():
 if not st.session_state.get('authenticated', False):
     auth.show_auth_screen()
     st.stop()
+    
 
 # Inizializza le connessioni MongoDB
 client_players, client_italiana, client_svizzera = init_mongo_connections()
@@ -400,6 +401,12 @@ st.sidebar.link_button(
     use_container_width=True,
     type="primary"  # Usa lo stile primario di Streamlit
 )
+
+# Sezione debug autenticazione
+if st.sidebar.checkbox("🔍 Mostra debug autenticazione"):
+    from auth_utils import show_debug_messages
+    show_debug_messages()
+
 st.sidebar.markdown("---")
 
 st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)

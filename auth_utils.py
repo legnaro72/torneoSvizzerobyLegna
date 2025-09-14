@@ -47,20 +47,38 @@ def get_auth_collection():
 def check_password(password: str) -> bool:
     """Verifica se la password è corretta nel database"""
     if not password:
+        add_debug_message("Password vuota ricevuta", "warning")
         return False
     
     try:
         # 1. Connessione al database
         auth_collection = get_auth_collection()
         if auth_collection is None:
+            add_debug_message("Impossibile connettersi alla collezione di autenticazione", "error")
             return False
         
         # 2. Recupera TUTTI i documenti
         all_docs = list(auth_collection.find({}))
+        add_debug_message(f"Trovati {len(all_docs)} documenti nella collezione di autenticazione", "info")
+        
+        # Debug: mostra i documenti trovati (senza mostrare i valori delle password)
+        for i, doc in enumerate(all_docs, 1):
+            doc_debug = {}
+            for k, v in doc.items():
+                if k.lower() == 'password':
+                    doc_debug[k] = '********' if v else 'vuota'
+                elif k != '_id':
+                    doc_debug[k] = v
+            add_debug_message(f"Documento {i}: {doc_debug}", "debug")
+        
         if not all_docs:
+            add_debug_message("Nessun documento trovato nella collezione di autenticazione", "warning")
             return False
         
         # 3. Cerca la password
+        password = str(password).strip()
+        add_debug_message(f"Ricerca password: '{password}'", "debug")
+        
         for doc in all_docs:
             # Verifica se esiste il campo password (case sensitive prima)
             password_key = 'password' if 'password' in doc else None
@@ -70,6 +88,7 @@ def check_password(password: str) -> bool:
                 for key in doc.keys():
                     if key.lower() == 'password':
                         password_key = key
+                        add_debug_message(f"Trovato campo password con nome diverso: {key}", "debug")
                         break
             
             if password_key:
@@ -80,21 +99,32 @@ def check_password(password: str) -> bool:
                     stored_pwd = str(stored_pwd)
                 
                 # Normalizza entrambe le stringhe per il confronto
-                password_norm = str(password).strip()
-                stored_pwd_norm = str(stored_pwd).strip()
+                password_norm = password
+                stored_pwd_norm = stored_pwd.strip()
+                
+                # Debug: mostra i confronti
+                add_debug_message(f"Confronto con: '{stored_pwd_norm}'", "debug")
                 
                 # Confronto esatto
                 if stored_pwd_norm == password_norm:
+                    add_debug_message("Password trovata (confronto esatto)", "info")
                     return True
         
         # Se non trovata, proviamo con una ricerca case-insensitive
-        for doc in all_docs:
-            if 'password' in doc and str(doc['password']).lower() == str(password).lower():
-                return True
+        add_debug_message("Nessuna corrispondenza esatta, provo case-insensitive", "debug")
+        password_lower = password.lower()
         
+        for doc in all_docs:
+            if 'password' in doc and isinstance(doc['password'], str):
+                if doc['password'].strip().lower() == password_lower:
+                    add_debug_message("Password trovata (confronto case-insensitive)", "info")
+                    return True
+        
+        add_debug_message("Password non trovata nel database", "warning")
         return False
             
-    except Exception:
+    except Exception as e:
+        add_debug_message(f"Errore durante il controllo della password: {str(e)}", "error")
         return False
 
 def show_auth_screen():
@@ -194,3 +224,89 @@ def remove_password(password: str) -> bool:
     except Exception as e:
         add_debug_message(f"Errore durante la rimozione della password: {str(e)}", "error")
         return False
+
+def show_debug_messages():
+    """Mostra i messaggi di debug nell'interfaccia"""
+    if not debug_messages:
+        st.write("Nessun messaggio di debug disponibile")
+        return
+    
+    st.subheader("🔍 Log di Debug")
+    
+    # Filtra i messaggi per livello
+    level_filter = st.selectbox(
+        "Filtra per livello",
+        ["Tutti"] + sorted(set(msg['level'] for msg in debug_messages)),
+        index=0
+    )
+    
+    # Mostra i messaggi in ordine cronologico inverso (i più recenti prima)
+    filtered_messages = [
+        msg for msg in debug_messages
+        if level_filter == "Tutti" or msg['level'] == level_filter
+    ]
+    
+    # Stile per i messaggi
+    style = """
+    <style>
+        .debug-box {
+            border-left: 5px solid #4CAF50;
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border-radius: 0 5px 5px 0;
+        }
+        .debug-box.warning {
+            border-left-color: #ff9800;
+            background-color: #fff3e0;
+        }
+        .debug-box.error {
+            border-left-color: #f44336;
+            background-color: #ffebee;
+        }
+        .debug-box.debug {
+            border-left-color: #2196F3;
+            background-color: #e3f2fd;
+        }
+        .debug-time {
+            font-size: 0.8em;
+            color: #666;
+            margin-right: 10px;
+        }
+        .debug-level {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .debug-message {
+            word-wrap: break-word;
+        }
+    </style>
+    """
+    st.markdown(style, unsafe_allow_html=True)
+    
+    # Mostra i messaggi
+    for msg in reversed(filtered_messages):
+        level_class = msg['level'].lower()
+        if level_class not in ['info', 'warning', 'error', 'debug']:
+            level_class = 'info'
+            
+        st.markdown(
+            f"""
+            <div class="debug-box {level_class}">
+                <div>
+                    <span class="debug-time">{msg['time']}</span>
+                    <span class="debug-level">{msg['level'].upper()}</span>
+                </div>
+                <div class="debug-message">{msg['message']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    # Pulsante per pulire i log
+    if st.button("🔄 Aggiorna log"):
+        st.rerun()
+        
+    if st.button("🗑️ Pulisci log"):
+        debug_messages.clear()
+        st.rerun()
