@@ -408,9 +408,10 @@ st.sidebar.markdown("---")
 
 st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)
 
-# Check admin status
+# Check user status and permissions
 current_user = auth.get_current_user()
 is_admin = current_user and current_user.get('role') == 'A'
+is_guest = current_user and current_user.get('role') == 'G'
 
 # Inizializza i dataframe nel session state
 if "df_giocatori" not in st.session_state:
@@ -653,9 +654,13 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
                 }
             )
         
-        # Add save button
-        if st.button("💾 Salva Modifiche Tabella"):
-            st.session_state.show_password_dialog = True
+        # Add save button - only for non-guest users
+        
+        if is_guest:
+            st.warning("Gli ospiti possono solo visualizzare i dati. Effettua il login per modificare.")
+        else:
+            if st.button("💾 Salva Modifiche Tabella"):
+                st.session_state.show_password_dialog = True
             
         # Password dialog
         if st.session_state.get('show_password_dialog', False):
@@ -798,8 +803,11 @@ elif st.session_state.edit_index is not None: # Logica di modifica/aggiunta gioc
 
     col_save, col_cancel = st.columns(2)
     with col_save:
-        if st.button("✅ Salva"):
-            save_player(giocatore, squadra, potenziale, ruolo)
+        if is_guest:
+            st.button("✅ Salva", disabled=True, help="Non disponibile per gli ospiti")
+        else:
+            if st.button("✅ Salva"):
+                save_player(giocatore, squadra, potenziale, ruolo)
     with col_cancel:
         if st.button("❌ Annulla"):
             st.session_state.edit_index = None
