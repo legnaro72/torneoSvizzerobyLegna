@@ -585,6 +585,12 @@ def init_results_temp_from_df(df):
 
 def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visualizzazione):
     """Visualizza gli incontri del turno attivo e permette di inserire e validare i risultati."""
+    is_read_only = st.session_state.get('read_only', False)
+    
+    # Mostra avviso di sola lettura se necessario
+    if is_read_only:
+        st.warning("🔒 Modalità di sola lettura. Le modifiche non sono consentite.")
+    
     for i, riga in df_turno_corrente.iterrows():
         with st.container(border=True):
             casa = riga['Casa']
@@ -628,47 +634,45 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             if key_val not in st.session_state.risultati_temp:
                 st.session_state.risultati_temp[key_val] = validata_iniziale
             
-            c_score1, c_score2 = st.columns(2)
-            with c_score1:
-                st.session_state.risultati_temp[key_gc] = st.number_input(
-                    f"Gol {casa}",
-                    min_value=0,
-                    value=st.session_state.risultati_temp[key_gc], # Usa il valore salvato in session_state
-                    key=key_gc,
-                    disabled=st.session_state.risultati_temp.get(key_val, False)
-                )
-            with c_score2:
-                st.session_state.risultati_temp[key_go] = st.number_input(
-                    f"Gol {ospite}",
-                    min_value=0,
-                    value=st.session_state.risultati_temp[key_go], # Usa il valore salvato in session_state
-                    key=key_go,
-                    disabled=st.session_state.risultati_temp.get(key_val, False)
-                )
-            
-            st.markdown("---")
-            validata_checkbox = st.checkbox(
-                "✅ Valida Risultato",
-                value=st.session_state.risultati_temp.get(key_val, False),
-                key=valida_key
-            )
-            
-            # Aggiorna il risultato quando la checkbox cambia stato
-            if validata_checkbox != st.session_state.risultati_temp.get(key_val, False):
-                st.session_state.risultati_temp[key_val] = validata_checkbox
-                if validata_checkbox:
-                    # Salva i risultati nel DataFrame quando viene validato
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolCasa'] = st.session_state.risultati_temp[key_gc]
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
-                    st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
-                    st.success("✅ Risultato validato!")
-                else:
-                    # Rimuovi la validazione se deselezionata
-                    df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = False
-                    st.session_state.df_torneo.loc[df_turno_corrente.index, 'Validata'] = False
-                    st.info("⚠️ Validazione rimossa")
-                st.rerun()
+            # Mostra i risultati in base alla modalità
+            if is_read_only or validata_iniziale:
+                # Modalità di sola lettura o partita già validata: mostra solo il risultato
+                st.markdown(f"<div style='text-align: center; font-size: 24px; font-weight: bold;'>{st.session_state.risultati_temp[key_gc]} - {st.session_state.risultati_temp[key_go]}</div>", 
+                            unsafe_allow_html=True)
+                if validata_iniziale:
+                    st.success("✅ Incontro validato")
+            else:
+                # Modalità modifica: mostra gli input
+                c_score1, c_score2 = st.columns(2)
+                with c_score1:
+                    st.session_state.risultati_temp[key_gc] = st.number_input(
+                        f"Gol {casa}",
+                        min_value=0,
+                        value=st.session_state.risultati_temp[key_gc],
+                        key=key_gc,
+                        disabled=st.session_state.risultati_temp.get(key_val, False) or is_read_only
+                    )
+                with c_score2:
+                    st.session_state.risultati_temp[key_go] = st.number_input(
+                        f"Gol {ospite}",
+                        min_value=0,
+                        value=st.session_state.risultati_temp[key_go],
+                        key=key_go,
+                        disabled=st.session_state.risultati_temp.get(key_val, False) or is_read_only
+                    )
+                
+                st.markdown("---")
+                if not st.session_state.risultati_temp.get(key_val, False):
+                    validata_checkbox = st.checkbox(
+                        f"✅ Contrassegna come validato",
+                        value=False,
+                        key=valida_key,
+                        disabled=is_read_only
+                    )
+                    st.session_state.risultati_temp[key_val] = validata_checkbox
+                    
+                    if validata_checkbox:
+                        st.success("✅ Incontro validato!")
             
             # Mostra stato validazione
             if st.session_state.risultati_temp.get(key_val, False):
@@ -713,10 +717,16 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
                     </div>""",
                 unsafe_allow_html=True,
             )
-            if st.button("Nuovo torneo ✨", key="btn_nuovo", use_container_width=True):
-                st.session_state.setup_mode = "nuovo"
-                st.session_state.nuovo_torneo_step = 0
-                st.session_state.giocatori_selezionati_db = []
+            if st.button("Nuovo torneo ✨", 
+                       key="btn_nuovo", 
+                       use_container_width=True,
+                       disabled=st.session_state.get('read_only', False)):
+                if auth.verify_write_access():
+                    st.session_state.setup_mode = "nuovo"
+                    st.session_state.nuovo_torneo_step = 0
+                    st.session_state.giocatori_selezionati_db = []
+                else:
+                    st.error("⛔ Accesso in sola lettura. Non puoi creare nuovi tornei.")
                 st.session_state.giocatori_ospiti = []
                 st.session_state.giocatori_totali = []
                 st.session_state.club_scelto = "Superba"
@@ -770,10 +780,16 @@ if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
     if st.session_state.nuovo_torneo_step == 0:
         suffisso = st.text_input("Dai un nome al tuo torneo", value="", placeholder="Es. 'Campionato Invernale'")
-        if st.button("Prossimo passo ➡️", key="next_step_0", type="primary"):
-            st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero - {suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
-            st.session_state.nuovo_torneo_step = 1
-            st.rerun()
+        if st.button("Prossimo passo >", 
+                   key="next_step_0", 
+                   type="primary",
+                   disabled=st.session_state.get('read_only', False)):
+            if auth.verify_write_access():
+                st.session_state.nome_torneo = f"Torneo Subbuteo Svizzero - {suffisso.strip()}" if suffisso.strip() else "Torneo Subbuteo - Sistema Svizzero"
+                st.session_state.nuovo_torneo_step = 1
+                st.rerun()
+            else:
+                st.error("⛔ Accesso in sola lettura. Non puoi creare nuovi tornei.")
     elif st.session_state.nuovo_torneo_step == 1:
         st.info(f"**Nome del torneo:** {st.session_state.nome_torneo}")
         st.markdown("### Selezione partecipanti 👥")
@@ -853,7 +869,8 @@ if st.session_state.setup_mode == "nuovo":
                 squadra_nuova = st.text_input(
                     f"Squadra",
                     value=st.session_state['gioc_info'][gioc]["Squadra"],
-                    key=f"squadra_input_{gioc}"
+                    key=f"squadra_input_{gioc}",
+                    disabled=st.session_state.get('read_only', False)
                 )
                 
                 potenziale_nuovo = st.slider(
@@ -861,7 +878,8 @@ if st.session_state.setup_mode == "nuovo":
                     min_value=0,
                     max_value=10,
                     value=int(st.session_state['gioc_info'][gioc]["Potenziale"]),
-                    key=f"potenziale_slider_{gioc}"
+                    key=f"potenziale_slider_{gioc}",
+                    disabled=st.session_state.get('read_only', False)
                 )
                 
                 st.session_state['gioc_info'][gioc]["Squadra"] = squadra_nuova
@@ -869,7 +887,10 @@ if st.session_state.setup_mode == "nuovo":
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Genera calendario ▶️", type="primary", use_container_width=True):
+            if st.button("Genera calendario ▶️", 
+                       type="primary", 
+                       use_container_width=True,
+                       disabled=st.session_state.get('read_only', False)):
                 df_squadre_aggiornato = []
                 for gioc, info in st.session_state['gioc_info'].items():
                     df_squadre_aggiornato.append({
@@ -911,6 +932,13 @@ if st.session_state.setup_mode == "nuovo":
 # -------------------------
 # Sidebar
 # -------------------------
+# 👤 Visualizza informazioni utente autenticato
+if st.session_state.get("authenticated"):
+    user = st.session_state.get("user", {})
+    st.sidebar.markdown(f"**👤 Utente:** {user.get('username', '??')}")
+    st.sidebar.markdown(f"**🔑 Ruolo:** {user.get('role', '??')}")
+    st.sidebar.markdown("---")
+
 # ✅ 1. 🕹️ Gestione Rapida (in cima)
 st.sidebar.subheader("🕹️ Gestione Rapida")
 st.sidebar.link_button("➡️ Vai a Hub Tornei", "https://farm-tornei-subbuteo-superba-all-db.streamlit.app/", use_container_width=True)
@@ -922,22 +950,34 @@ if st.session_state.torneo_iniziato:
     # ✅ 2. ⚙️ Opzioni Torneo
     st.sidebar.subheader("⚙️ Opzioni Torneo")
     if tournaments_collection is not None:
-        if st.sidebar.button("💾 Salva Torneo", key="save_tournament", use_container_width=True):
-            salva_torneo_su_db()
-            st.sidebar.success("✅ Torneo salvato su DB!")
+        if st.sidebar.button("💾 Salva Torneo", 
+                          key="save_tournament", 
+                          use_container_width=True,
+                          disabled=st.session_state.get('read_only', False)):
+            if auth.verify_write_access():
+                salva_torneo_su_db()
+                st.sidebar.success("✅ Torneo salvato su DB!")
+            else:
+                st.sidebar.error("⛔ Accesso in sola lettura. Non puoi salvare modifiche.")
 
-    if st.sidebar.button("🏁 Termina Torneo", key="reset_app", use_container_width=True):
-        salva_torneo_su_db()
-        st.session_state.torneo_iniziato = False
-        st.session_state.setup_mode = None
-        st.session_state.df_torneo = pd.DataFrame()
-        st.session_state.df_squadre = pd.DataFrame()
-        st.session_state.turno_attivo = 0
-        st.session_state.risultati_temp = {}
-        st.session_state.nuovo_torneo_step = 1
-        st.session_state.torneo_finito = False
-        st.sidebar.success("✅ Torneo terminato. Dati resettati.")
-        st.rerun()
+    if st.sidebar.button("🏁 Termina Torneo", 
+                       key="reset_app", 
+                       use_container_width=True,
+                       disabled=st.session_state.get('read_only', False)):
+        if auth.verify_write_access():
+            salva_torneo_su_db()
+            st.session_state.torneo_iniziato = False
+            st.session_state.setup_mode = None
+            st.session_state.df_torneo = pd.DataFrame()
+            st.session_state.df_squadre = pd.DataFrame()
+            st.session_state.turno_attivo = 0
+            st.session_state.risultati_temp = {}
+            st.session_state.nuovo_torneo_step = 1
+            st.session_state.torneo_finito = False
+            st.sidebar.success("✅ Torneo terminato. Dati resettati.")
+            st.rerun()
+        else:
+            st.sidebar.error("⛔ Accesso in sola lettura. Non puoi terminare il torneo.")
 
     st.sidebar.markdown("---")
 
@@ -1097,10 +1137,16 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
             df_turno_prossimo = genera_accoppiamenti(classifica_attuale, precedenti)
 
             if not df_turno_prossimo.empty:
-                if st.button("▶️ Genera prossimo turno", use_container_width=True, type="primary"):
-                    salva_torneo_su_db() # Salva i risultati del turno corrente
-                    st.session_state.turno_attivo += 1
-                    df_turno_prossimo["Turno"] = st.session_state.turno_attivo
+                if st.button("▶️ Genera prossimo turno", 
+                           use_container_width=True, 
+                           type="primary",
+                           disabled=st.session_state.get('read_only', False)):
+                    if auth.verify_write_access():
+                        salva_torneo_su_db() # Salva i risultati del turno corrente
+                        st.session_state.turno_attivo += 1
+                        df_turno_prossimo["Turno"] = st.session_state.turno_attivo
+                    else:
+                        st.error("⛔ Accesso in sola lettura. Non puoi generare nuovi turni.")
                     st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
                     st.session_state.risultati_temp = {}
                     init_results_temp_from_df(df_turno_prossimo)
