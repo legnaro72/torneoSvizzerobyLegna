@@ -31,7 +31,7 @@ def init_mongo_connections():
 
 # Mostra la schermata di autenticazione se non si è già autenticati
 if not st.session_state.get('authenticated', False):
-    auth.show_auth_screen()
+    auth.show_auth_screen(club="Superba")
     st.stop()
     
 
@@ -333,7 +333,7 @@ def salva_tornei_svizzeri(df):
 
 # Mostra la schermata di autenticazione se non si è già autenticati
 if not st.session_state.get('authenticated', False):
-    auth.show_auth_screen()
+    auth.show_auth_screen(club="Superba")
     st.stop()
 
 st.set_page_config(
