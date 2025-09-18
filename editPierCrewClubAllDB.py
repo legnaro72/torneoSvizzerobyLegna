@@ -31,7 +31,7 @@ def init_mongo_connections():
 
 # Mostra la schermata di autenticazione se non si è già autenticati
 if not st.session_state.get('authenticated', False):
-    auth.show_auth_screen()
+    auth.show_auth_screen(club="PierCrew")
     st.stop()
     
 
@@ -333,7 +333,7 @@ def salva_tornei_svizzeri(df):
 
 # Mostra la schermata di autenticazione se non si è già autenticati
 if not st.session_state.get('authenticated', False):
-    auth.show_auth_screen()
+    auth.show_auth_screen(club="PierCrew")
     st.stop()
 
 st.set_page_config(
@@ -403,13 +403,15 @@ st.sidebar.link_button(
 )
 
 # Sezione debug autenticazione
-if st.sidebar.checkbox("🔍 Mostra debug autenticazione"):
-    from auth_utils import show_debug_messages
-    show_debug_messages()
-
+# Rimossa la sezione di debug non più necessaria
 st.sidebar.markdown("---")
 
 st.markdown("<h1 class='button-title'>👥 Gestione del Club e dei Tornei🏆</h1>", unsafe_allow_html=True)
+
+# Check user status and permissions
+current_user = auth.get_current_user()
+is_admin = current_user and current_user.get('role') == 'A'
+is_guest = current_user and current_user.get('role') == 'G'
 
 # Inizializza i dataframe nel session state
 if "df_giocatori" not in st.session_state:
@@ -423,19 +425,27 @@ if "df_tornei_svizzeri" not in st.session_state:
 def add_player():
     st.session_state.edit_index = -1
 
-def save_player(giocatore, squadra, potenziale):
+def save_player(giocatore, squadra, potenziale, ruolo="R"):
     if giocatore.strip() == "":
         st.error("Il nome del giocatore non può essere vuoto!")
     else:
         if st.session_state.edit_index == -1:
-            nuova_riga = {"Giocatore": giocatore.strip(), "Squadra": squadra.strip(), "Potenziale": potenziale}
-            st.session_state.df_giocatori = pd.concat([st.session_state.df_giocatori, pd.DataFrame([nuova_riga])], ignore_index=True)
+            new_row = {
+                "Giocatore": giocatore,
+                "Squadra": squadra,
+                "Potenziale": potenziale,
+                "Ruolo": ruolo,
+                "Password": None,
+                "SetPwd": 0
+            }
+            st.session_state.df_giocatori = pd.concat([st.session_state.df_giocatori, pd.DataFrame([new_row])], ignore_index=True)
             st.toast(f"Giocatore '{giocatore}' aggiunto!")
         else:
             idx = st.session_state.edit_index
             st.session_state.df_giocatori.at[idx, "Giocatore"] = giocatore.strip()
             st.session_state.df_giocatori.at[idx, "Squadra"] = squadra.strip()
             st.session_state.df_giocatori.at[idx, "Potenziale"] = potenziale
+            st.session_state.df_giocatori.at[idx, "Ruolo"] = ruolo
             st.toast(f"Giocatore '{giocatore}' aggiornato!")
             
         st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
@@ -579,23 +589,78 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
     # Create a copy of the dataframe for editing
     df = st.session_state.df_giocatori.copy()
     
-    if not df.empty:
-        # Make the dataframe editable
-        edited_df = st.data_editor(
-            df,
-            disabled=["id"],  # Make the ID column read-only
-            num_rows="dynamic",  # Allow adding/deleting rows
-            use_container_width=True,
-            column_config={
-                "Giocatore": "Giocatore",
-                "Squadra": "Squadra",
-                "Potenziale": st.column_config.NumberColumn("Potenziale", min_value=1, max_value=10, step=1, format="%d")
-            }
-        )
+    # Add role legend
+    with st.expander("Legenda Ruoli"):
+        st.markdown("""
+        - **R**: Reader (sola lettura)
+        - **W**: Writer (lettura e scrittura)
+        - **A**: Amministratore (tutti i permessi)
+        """)
         
-        # Add save button
-        if st.button("💾 Salva Modifiche Tabella"):
-            st.session_state.show_password_dialog = True
+    if not df.empty:
+        # Create a copy of the dataframe with the columns we want to show
+        display_columns = ["Giocatore", "Squadra", "Potenziale", "Ruolo"]
+        display_df = df[display_columns].copy()
+        
+        # Format the role for display
+        role_display_map = {
+            "R": "Reader",
+            "W": "Writer",
+            "A": "Admin"
+        }
+        
+        # Create a display version of the role column for non-admins
+        # First ensure the column exists and fill any NaN values with 'R' (Reader)
+        if "Ruolo" not in display_df.columns:
+            display_df["Ruolo"] = "R"
+        display_df["Ruolo"] = display_df["Ruolo"].fillna("R")
+        
+        # Create a copy of the role column for display
+        display_df["Ruolo_Display"] = display_df["Ruolo"].map(lambda x: role_display_map.get(str(x).strip(), "Reader"))
+        
+        # Make the dataframe editable - show different columns based on admin status
+        if is_admin:
+            # For admins, show the editable role column
+            edited_df = st.data_editor(
+                display_df[display_columns],  # Show original columns
+                disabled=["id"],
+                num_rows="dynamic",
+                use_container_width=True,
+                column_config={
+                    "Giocatore": "Giocatore",
+                    "Squadra": "Squadra",
+                    "Potenziale": st.column_config.NumberColumn("Potenziale", min_value=1, max_value=10, step=1, format="%d"),
+                    "Ruolo": st.column_config.SelectboxColumn(
+                        "Ruolo",
+                        help="Ruolo del giocatore (R=Reader, W=Writer, A=Admin)",
+                        width="medium",
+                        options=["R", "W", "A"],
+                        required=True
+                    )
+                }
+            )
+        else:
+            # For non-admins, show the display version of the role
+            display_columns_non_admin = ["Giocatore", "Squadra", "Potenziale", "Ruolo_Display"]
+            edited_df = st.data_editor(
+                display_df[display_columns_non_admin],
+                disabled=display_columns_non_admin,  # Make all columns read-only
+                use_container_width=True,
+                column_config={
+                    "Giocatore": "Giocatore",
+                    "Squadra": "Squadra",
+                    "Potenziale": "Potenziale",
+                    "Ruolo_Display": st.column_config.TextColumn("Ruolo")
+                }
+            )
+        
+        # Add save button - only for non-guest users
+        
+        if is_guest:
+            st.warning("Gli ospiti possono solo visualizzare i dati. Effettua il login per modificare.")
+        else:
+            if st.button("💾 Salva Modifiche Tabella"):
+                st.session_state.show_password_dialog = True
             
         # Password dialog
         if st.session_state.get('show_password_dialog', False):
@@ -693,21 +758,56 @@ elif st.session_state.edit_index is not None: # Logica di modifica/aggiunta gioc
         default_giocatore = ""
         default_squadra = ""
         default_potenziale = 4
+        default_ruolo = "R"
     else:
         st.subheader("✏️ Modifica giocatore")
         idx = st.session_state.edit_index
         default_giocatore = st.session_state.df_giocatori.at[idx, "Giocatore"]
         default_squadra = st.session_state.df_giocatori.at[idx, "Squadra"]
         default_potenziale = st.session_state.df_giocatori.at[idx, "Potenziale"]
+        default_ruolo = st.session_state.df_giocatori.at[idx, "Ruolo"]
 
     giocatore = st.text_input("Nome Giocatore", value=default_giocatore, key="giocatore_input")
     squadra = st.text_input("Squadra", value=default_squadra, key="squadra_input")
     potenziale = st.slider("Potenziale", 1, 10, default_potenziale, key="potenziale_input")
+    # Get valid role or default to 'R' if invalid
+    valid_roles = ["R", "W", "A"]
+    default_role = default_ruolo if pd.notna(default_ruolo) and str(default_ruolo).strip() in valid_roles else "R"
+    
+    # Only show role selector for admins
+    if is_admin:
+        ruolo = st.selectbox(
+            "Ruolo", 
+            options=valid_roles, 
+            format_func=lambda x: {"R": "Reader (sola lettura)", "W": "Writer (lettura/scrittura)", "A": "Amministratore"}[x],
+            index=valid_roles.index(default_role),
+            key="ruolo_input"
+        )
+    else:
+        # Non-admin users see the role as read-only text
+        ruolo = default_role
+        ruolo_display = {"R": "Reader (sola lettura)", "W": "Writer (lettura/scrittura)", "A": "Amministratore"}.get(default_role, "Reader (sola lettura)")
+        st.text_input("Ruolo", value=ruolo_display, disabled=True)
+
+    if st.session_state.edit_index != -1:  # Only show in edit mode, not in add mode
+        if is_admin:
+            if st.button("🔄 Reset Password", help="Resetta la password dell'utente e imposta SetPwd a 0"):
+                idx = st.session_state.edit_index
+                st.session_state.df_giocatori.at[idx, "Password"] = None
+                st.session_state.df_giocatori.at[idx, "SetPwd"] = 0
+                salva_dati_su_mongo(st.session_state.df_giocatori)
+                st.toast("✅ Password resettata con successo!")
+                st.rerun()
+        else:
+            st.warning("Solo l'amministratore può resettare le password")
 
     col_save, col_cancel = st.columns(2)
     with col_save:
-        if st.button("✅ Salva"):
-            save_player(giocatore, squadra, potenziale)
+        if is_guest:
+            st.button("✅ Salva", disabled=True, help="Non disponibile per gli ospiti")
+        else:
+            if st.button("✅ Salva"):
+                save_player(giocatore, squadra, potenziale, ruolo)
     with col_cancel:
         if st.button("❌ Annulla"):
             st.session_state.edit_index = None
