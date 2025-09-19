@@ -1,10 +1,45 @@
 
-
 import streamlit as st
+
+# Configurazione della pagina DEVE essere la PRIMA operazione Streamlit
+st.set_page_config(
+    page_title="Torneo Subbuteo - Svizzero",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Ora importiamo le altre dipendenze
 import pandas as pd
 from datetime import datetime
 import io
 from fpdf import FPDF
+
+# Aggiungi lo script JavaScript per il keep-alive
+def add_keep_alive():
+    js = """
+    <script>
+    // Individua l'URL corretto dell'app Streamlit
+    const target = document.referrer || window.location.origin;
+
+    // Esegui un ping ogni 4 minuti (240000 ms)
+    setInterval(function() {
+        fetch(target, {
+            method: 'HEAD',
+            cache: 'no-store',
+            credentials: 'same-origin',
+            mode: 'no-cors'
+        }).then(() => {
+            console.log("Keep-alive sent:", new Date().toLocaleTimeString());
+        }).catch((err) => console.log("Keep-alive error", err));
+    }, 240000);
+    </script>
+    """
+    st.components.v1.html(js, height=0, width=0)
+
+# Inizializza il keep-alive
+add_keep_alive()
+
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from bson.objectid import ObjectId
@@ -23,15 +58,7 @@ if not st.session_state.get('authenticated', False):
     auth.show_auth_screen(club="PierCrew")
     st.stop()
 
-# -------------------------
-# Configurazione della pagina
-# -------------------------
-st.set_page_config(
-    page_title="Torneo Subbuteo - Svizzero",
-    page_icon="⚽",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Configurazione della pagina già impostata all'inizio
 
 def reset_app_state():
     """Resetta lo stato dell'applicazione"""
@@ -273,27 +300,59 @@ body[data-theme="dark"] [data-testid="stSidebar"] h3 {
 # Connessione a MongoDB Atlas
 # -------------------------
 
+def check_internet_connection():
+    try:
+        import socket
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except OSError:
+        return False
+
 players_collection = None
 tournaments_collection = None
-with st.spinner("Connessione a MongoDB..."):
-    try:
-        MONGO_URI = st.secrets["MONGO_URI"]
-        server_api = ServerApi('1')
-        client = MongoClient(MONGO_URI, server_api=server_api)
-        
-        # Connessione per i giocatori
-        db_players = client.get_database("giocatori_subbuteo")
-        players_collection = db_players.get_collection("piercrew_players") 
-        _ = players_collection.find_one()
 
-        # Connessione per i tornei (nuovo)
-        db_tournaments = client.get_database("TorneiSubbuteo")
-        tournaments_collection = db_tournaments.get_collection("PierCrewSvizzero")
-        _ = tournaments_collection.find_one()
+if not check_internet_connection():
+    st.sidebar.error("❌ Nessuna connessione Internet rilevata. Verifica la tua connessione e riprova.")
+else:
+    with st.spinner("Connessione a MongoDB..."):
+        try:
+            MONGO_URI = st.secrets.get("MONGO_URI")
+            if not MONGO_URI:
+                st.sidebar.warning("⚠️ Chiave MONGO_URI non trovata nei segreti di Streamlit.")
+            else:
+                server_api = ServerApi('1')
+                client = MongoClient(MONGO_URI, 
+                                  server_api=server_api,
+                                  connectTimeoutMS=5000,  # 5 secondi di timeout
+                                  socketTimeoutMS=5000,
+                                  serverSelectionTimeoutMS=5000)
+                
+                # Test connessione
+                client.admin.command('ping')
+                
+                # Connessione per i giocatori
+                db_players = client.get_database("giocatori_subbuteo")
+                players_collection = db_players.get_collection("piercrew_players")
+                _ = players_collection.find_one()
 
-        #st.sidebar.toast("✅ Connessione a MongoDB Atlas riuscita.")
-    except Exception as e:
-        st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
+                # Connessione per i tornei
+                db_tournaments = client.get_database("TorneiSubbuteo")
+                tournaments_collection = db_tournaments.get_collection("PierCrewSvizzero")
+                _ = tournaments_collection.find_one()
+                
+                st.sidebar.success("✅ Connessione a MongoDB Atlas riuscita!")
+                
+        except Exception as e:
+            st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
+            st.sidebar.warning("""
+            **Risoluzione problemi:**
+            1. Verifica la tua connessione Internet
+            2. Controlla il file .streamlit/secrets.toml
+            3. Assicurati che l'IP sia nella whitelist di MongoDB Atlas
+            4. Controlla che il tuo account MongoDB Atlas sia attivo
+            
+            L'applicazione funzionerà in modalità offline con funzionalità limitate.
+            """)
 
 # -------------------------
 # Funzioni di utilità
@@ -317,6 +376,18 @@ def salva_torneo_su_db():
     if tournaments_collection is None:
         st.error("❌ Connessione a MongoDB non attiva, impossibile salvare.")
         return False
+        
+    # Verifica se abbiamo già un ID torneo valido nella sessione
+    if 'tournament_id' in st.session_state and st.session_state.tournament_id:
+        try:
+            # Verifica se il torneo esiste ancora nel database
+            existing = tournaments_collection.find_one({"_id": ObjectId(st.session_state.tournament_id)})
+            if not existing:
+                # Se il torneo non esiste più, rimuoviamo l'ID dalla sessione
+                del st.session_state.tournament_id
+        except:
+            # In caso di errore (es. ID non valido), rimuoviamo l'ID dalla sessione
+            del st.session_state.tournament_id
 
     torneo_data = {
         "nome_torneo": st.session_state.nome_torneo,
@@ -352,6 +423,7 @@ def salva_torneo_su_db():
                 result = tournaments_collection.insert_one(torneo_data)
                 st.session_state.tournament_id = str(result.inserted_id)
                 st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+        return True
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
@@ -511,22 +583,59 @@ def esporta_pdf(df_torneo, nome_torneo):
         return None
 
 
+def calcola_punti_scontro_diretto(squadra1, squadra2, df):
+    """Calcola i punti nello scontro diretto tra due squadre"""
+    scontri = df[
+        ((df['Casa'] == squadra1) & (df['Ospite'] == squadra2)) |
+        ((df['Casa'] == squadra2) & (df['Ospite'] == squadra1))
+    ]
+    
+    punti1 = punti2 = 0
+    
+    for _, r in scontri.iterrows():
+        if not bool(r.get('Validata', False)):
+            continue
+            
+        if r['Casa'] == squadra1:
+            gc, go = int(r['GolCasa']), int(r['GolOspite'])
+        else:
+            go, gc = int(r['GolCasa']), int(r['GolOspite'])
+            
+        if gc > go:
+            punti1 += 2
+        elif go > gc:
+            punti2 += 2
+        else:
+            punti1 += 1
+            punti2 += 1
+            
+    return punti1, punti2
+
 def aggiorna_classifica(df):
     stats = {}
+    
+    # Inizializza le statistiche per ogni squadra
+    squadre = set(df['Casa'].unique()).union(set(df['Ospite'].unique()))
+    for squadra in squadre:
+        stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0, 'G': 0, 'V': 0, 'N': 0, 'P': 0}
+    
+    # Calcola le statistiche di base
     for _, r in df.iterrows():
         if not bool(r.get('Validata', False)):
             continue
+            
         casa, osp = r['Casa'], r['Ospite']
         gc, go = int(r['GolCasa']), int(r['GolOspite'])
-        for squadra in [casa, osp]:
-            if squadra not in stats:
-                stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0, 'G': 0, 'V': 0, 'N': 0, 'P': 0}
+        
+        # Aggiorna statistiche generali
         stats[casa]['G'] += 1
         stats[osp]['G'] += 1
         stats[casa]['GF'] += gc
         stats[casa]['GS'] += go
         stats[osp]['GF'] += go
         stats[osp]['GS'] += gc
+        
+        # Aggiorna punteggi
         if gc > go:
             stats[casa]['Punti'] += 2
             stats[casa]['V'] += 1
@@ -540,22 +649,62 @@ def aggiorna_classifica(df):
             stats[osp]['Punti'] += 1
             stats[casa]['N'] += 1
             stats[osp]['N'] += 1
+    
+    # Calcola la differenza reti per ogni squadra
+    for squadra in stats:
+        stats[squadra]['DR'] = stats[squadra]['GF'] - stats[squadra]['GS']
+    
+    # Crea il DataFrame
     if not stats:
         return pd.DataFrame(columns=['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR'])
-    df_class = pd.DataFrame([
-        {'Squadra': s,
-         'Punti': v['Punti'],
-         'G': v['G'],
-         'V': v['V'],
-         'N': v['N'],
-         'P': v['P'],
-         'GF': v['GF'],
-         'GS': v['GS'],
-         'DR': v['GF'] - v['GS']}
-        for s, v in stats.items()
-    ])
-    df_class = df_class.sort_values(by=['Punti', 'DR', 'GF'], ascending=False).reset_index(drop=True)
-    return df_class
+    
+    df_classifica = pd.DataFrame([(k, v['Punti'], v['G'], v['V'], v['N'], v['P'], v['GF'], v['GS'], v['DR']) 
+                                for k, v in stats.items()],
+                              columns=['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR'])
+    
+    # Ordina usando una chiave personalizzata che include il confronto diretto
+    def sort_key(row):
+        # Crea una tupla con i criteri di ordinamento
+        # 1. Punti (decrescente)
+        # 2. Punti negli scontri diretti (se ci sono)
+        # 3. Differenza reti (decrescente)
+        # 4. Gol fatti (decrescente)
+        # 5. Nome squadra (crescente)
+        
+        punti = -row['Punti']  # Moltiplicato per -1 per ordinamento decrescente
+        dr = -row['DR']
+        gf = -row['GF']
+        squadra = row['Squadra'].lower()  # Converti in minuscolo per ordinamento case-insensitive
+        
+        # Calcola i punti negli scontri diretti con le squadre con gli stessi punti
+        stesse_punti = df_classifica[df_classifica['Punti'] == row['Punti']]['Squadra'].tolist()
+        if len(stesse_punti) > 1 and row['Squadra'] in stesse_punti:
+            # Calcola la classifica parziale solo tra le squadre a pari punti
+            punteggi_scontri = {}
+            for s in stesse_punti:
+                punteggi_scontri[s] = 0
+                
+            for i, s1 in enumerate(stesse_punti):
+                for s2 in stesse_punti[i+1:]:
+                    p1, p2 = calcola_punti_scontro_diretto(s1, s2, df)
+                    punteggi_scontri[s1] += p1
+                    punteggi_scontri[s2] += p2
+            
+            # Usa il punteggio negli scontri diretti come secondo criterio
+            punti_scontri = -punteggi_scontri.get(row['Squadra'], 0)
+        else:
+            punti_scontri = 0
+            
+        # Aggiungi un log per debug
+        # st.write(f"{row['Squadra']}: Punti={-punti}, Scontri={-punti_scontri}, DR={-dr}, GF={-gf}")
+            
+        return (punti, punti_scontri, dr, gf, squadra)
+    
+    # Applica l'ordinamento personalizzato
+    indici_ordinati = sorted(df_classifica.index, key=lambda x: sort_key(df_classifica.loc[x]))
+    df_classifica = df_classifica.loc[indici_ordinati].reset_index(drop=True)
+    
+    return df_classifica
 
 @st.cache_data
 def genera_accoppiamenti(classifica, precedenti):
@@ -668,12 +817,18 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
                     st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
-                    st.success("✅ Risultato validato!")
+                    if salva_torneo_su_db():
+                        st.success("✅ Risultato validato e salvato!")
+                    else:
+                        st.error("❌ Errore durante il salvataggio del risultato")
                 else:
                     # Rimuovi la validazione se deselezionata
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = False
                     st.session_state.df_torneo.loc[df_turno_corrente.index, 'Validata'] = False
-                    st.info("⚠️ Validazione rimossa")
+                    if salva_torneo_su_db():
+                        st.info("⚠️ Validazione rimossa e modifiche salvate")
+                    else:
+                        st.error("❌ Errore durante il salvataggio delle modifiche")
                 st.rerun()
             
             # Mostra stato validazione
@@ -817,10 +972,17 @@ if st.session_state.setup_mode == "nuovo":
         with col_db:
             df_gioc = carica_giocatori_da_db()
             if not df_gioc.empty:
+                # Aggiungi checkbox per selezionare tutti i giocatori
+                select_all = st.checkbox("Seleziona tutti i giocatori")
+                
+                # Se la checkbox è selezionata, mostra tutti i giocatori, altrimenti mostra quelli precedentemente selezionati
+                default_players = df_gioc['Giocatore'].tolist() if select_all else st.session_state.giocatori_selezionati_db
+                
                 st.session_state.giocatori_selezionati_db = st.multiselect(
                     "Seleziona i giocatori che partecipano (dal database):",
                     options=df_gioc['Giocatore'].tolist(),
-                    default=st.session_state.giocatori_selezionati_db,
+                    default=default_players,
+                    key="player_selector"
                 )
         with col_num:
             num_squadre = st.number_input("Numero totale di partecipanti:", min_value=2, max_value=100, value=max(8, len(st.session_state.giocatori_selezionati_db)), step=1, key="num_partecipanti")
@@ -1180,13 +1342,23 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                     disabled=is_disabled_next,
                     help="Genera il prossimo turno" + ("" if verify_write_access() else " (accesso in sola lettura)")):
                     if verify_write_access():
-                        salva_torneo_su_db() # Salva i risultati del turno corrente
+                        # Salva i risultati del turno corrente
+                        if not salva_torneo_su_db():
+                            st.error("❌ Errore durante il salvataggio del turno corrente")
+                            st.stop()
+                            
                         st.session_state.turno_attivo += 1
                         df_turno_prossimo["Turno"] = st.session_state.turno_attivo
                         st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
                         st.session_state.risultati_temp = {}
                         init_results_temp_from_df(df_turno_prossimo)
-                        st.rerun()
+                        
+                        # Salva il nuovo turno
+                        if salva_torneo_su_db():
+                            st.success("✅ Nuovo turno generato e salvato con successo!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Errore durante il salvataggio del nuovo turno")
                     else:
                         st.error("⛔ Accesso in sola lettura. Non è possibile generare nuovi turni.")
             else:
