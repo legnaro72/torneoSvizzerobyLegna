@@ -1,9 +1,45 @@
 
 import streamlit as st
+
+# Configurazione della pagina DEVE essere la PRIMA operazione Streamlit
+st.set_page_config(
+    page_title="Torneo Subbuteo - Svizzero",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Ora importiamo le altre dipendenze
 import pandas as pd
 from datetime import datetime
 import io
 from fpdf import FPDF
+
+# Aggiungi lo script JavaScript per il keep-alive
+def add_keep_alive():
+    js = """
+    <script>
+    // Individua l'URL corretto dell'app Streamlit
+    const target = document.referrer || window.location.origin;
+
+    // Esegui un ping ogni 4 minuti (240000 ms)
+    setInterval(function() {
+        fetch(target, {
+            method: 'HEAD',
+            cache: 'no-store',
+            credentials: 'same-origin',
+            mode: 'no-cors'
+        }).then(() => {
+            console.log("Keep-alive sent:", new Date().toLocaleTimeString());
+        }).catch((err) => console.log("Keep-alive error", err));
+    }, 240000);
+    </script>
+    """
+    st.components.v1.html(js, height=0, width=0)
+
+# Inizializza il keep-alive
+add_keep_alive()
+
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from bson.objectid import ObjectId
@@ -22,15 +58,7 @@ if not st.session_state.get('authenticated', False):
     auth.show_auth_screen(club="Superba")
     st.stop()
 
-# -------------------------
-# Configurazione della pagina
-# -------------------------
-st.set_page_config(
-    page_title="Torneo Subbuteo - Svizzero",
-    page_icon="⚽",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Configurazione della pagina già impostata all'inizio
 
 def reset_app_state():
     """Resetta lo stato dell'applicazione"""
@@ -272,27 +300,59 @@ body[data-theme="dark"] [data-testid="stSidebar"] h3 {
 # Connessione a MongoDB Atlas
 # -------------------------
 
+def check_internet_connection():
+    try:
+        import socket
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except OSError:
+        return False
+
 players_collection = None
 tournaments_collection = None
-with st.spinner("Connessione a MongoDB..."):
-    try:
-        MONGO_URI = st.secrets["MONGO_URI"]
-        server_api = ServerApi('1')
-        client = MongoClient(MONGO_URI, server_api=server_api)
-        
-        # Connessione per i giocatori
-        db_players = client.get_database("giocatori_subbuteo")
-        players_collection = db_players.get_collection("superba_players") 
-        _ = players_collection.find_one()
 
-        # Connessione per i tornei (nuovo)
-        db_tournaments = client.get_database("TorneiSubbuteo")
-        tournaments_collection = db_tournaments.get_collection("SuperbaSvizzero")
-        _ = tournaments_collection.find_one()
+if not check_internet_connection():
+    st.sidebar.error("❌ Nessuna connessione Internet rilevata. Verifica la tua connessione e riprova.")
+else:
+    with st.spinner("Connessione a MongoDB..."):
+        try:
+            MONGO_URI = st.secrets.get("MONGO_URI")
+            if not MONGO_URI:
+                st.sidebar.warning("⚠️ Chiave MONGO_URI non trovata nei segreti di Streamlit.")
+            else:
+                server_api = ServerApi('1')
+                client = MongoClient(MONGO_URI, 
+                                  server_api=server_api,
+                                  connectTimeoutMS=5000,  # 5 secondi di timeout
+                                  socketTimeoutMS=5000,
+                                  serverSelectionTimeoutMS=5000)
+                
+                # Test connessione
+                client.admin.command('ping')
+                
+                # Connessione per i giocatori
+                db_players = client.get_database("giocatori_subbuteo")
+                players_collection = db_players.get_collection("superba_players")
+                _ = players_collection.find_one()
 
-        #st.sidebar.toast("✅ Connessione a MongoDB Atlas riuscita.")
-    except Exception as e:
-        st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}. Non sarà possibile caricare/salvare i dati del database.")
+                # Connessione per i tornei
+                db_tournaments = client.get_database("TorneiSubbuteo")
+                tournaments_collection = db_tournaments.get_collection("SuperbaSvizzero")
+                _ = tournaments_collection.find_one()
+                
+                st.sidebar.success("✅ Connessione a MongoDB Atlas riuscita!")
+                
+        except Exception as e:
+            st.sidebar.error(f"❌ Errore di connessione a MongoDB: {e}")
+            st.sidebar.warning("""
+            **Risoluzione problemi:**
+            1. Verifica la tua connessione Internet
+            2. Controlla il file .streamlit/secrets.toml
+            3. Assicurati che l'IP sia nella whitelist di MongoDB Atlas
+            4. Controlla che il tuo account MongoDB Atlas sia attivo
+            
+            L'applicazione funzionerà in modalità offline con funzionalità limitate.
+            """)
 
 # -------------------------
 # Funzioni di utilità
@@ -816,10 +876,17 @@ if st.session_state.setup_mode == "nuovo":
         with col_db:
             df_gioc = carica_giocatori_da_db()
             if not df_gioc.empty:
+                # Aggiungi checkbox per selezionare tutti i giocatori
+                select_all = st.checkbox("Seleziona tutti i giocatori")
+                
+                # Se la checkbox è selezionata, mostra tutti i giocatori, altrimenti mostra quelli precedentemente selezionati
+                default_players = df_gioc['Giocatore'].tolist() if select_all else st.session_state.giocatori_selezionati_db
+                
                 st.session_state.giocatori_selezionati_db = st.multiselect(
                     "Seleziona i giocatori che partecipano (dal database):",
                     options=df_gioc['Giocatore'].tolist(),
-                    default=st.session_state.giocatori_selezionati_db,
+                    default=default_players,
+                    key="player_selector"
                 )
         with col_num:
             num_squadre = st.number_input("Numero totale di partecipanti:", min_value=2, max_value=100, value=max(8, len(st.session_state.giocatori_selezionati_db)), step=1, key="num_partecipanti")
