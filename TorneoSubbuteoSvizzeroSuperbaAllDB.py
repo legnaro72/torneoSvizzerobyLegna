@@ -376,6 +376,18 @@ def salva_torneo_su_db():
     if tournaments_collection is None:
         st.error("❌ Connessione a MongoDB non attiva, impossibile salvare.")
         return False
+        
+    # Verifica se abbiamo già un ID torneo valido nella sessione
+    if 'tournament_id' in st.session_state and st.session_state.tournament_id:
+        try:
+            # Verifica se il torneo esiste ancora nel database
+            existing = tournaments_collection.find_one({"_id": ObjectId(st.session_state.tournament_id)})
+            if not existing:
+                # Se il torneo non esiste più, rimuoviamo l'ID dalla sessione
+                del st.session_state.tournament_id
+        except:
+            # In caso di errore (es. ID non valido), rimuoviamo l'ID dalla sessione
+            del st.session_state.tournament_id
 
     torneo_data = {
         "nome_torneo": st.session_state.nome_torneo,
@@ -411,6 +423,7 @@ def salva_torneo_su_db():
                 result = tournaments_collection.insert_one(torneo_data)
                 st.session_state.tournament_id = str(result.inserted_id)
                 st.success(f"✅ Nuovo torneo '{st.session_state.nome_torneo}' salvato con successo!")
+        return True
     except Exception as e:
         st.error(f"❌ Errore durante il salvataggio del torneo: {e}")
 
@@ -570,22 +583,59 @@ def esporta_pdf(df_torneo, nome_torneo):
         return None
 
 
+def calcola_punti_scontro_diretto(squadra1, squadra2, df):
+    """Calcola i punti nello scontro diretto tra due squadre"""
+    scontri = df[
+        ((df['Casa'] == squadra1) & (df['Ospite'] == squadra2)) |
+        ((df['Casa'] == squadra2) & (df['Ospite'] == squadra1))
+    ]
+    
+    punti1 = punti2 = 0
+    
+    for _, r in scontri.iterrows():
+        if not bool(r.get('Validata', False)):
+            continue
+            
+        if r['Casa'] == squadra1:
+            gc, go = int(r['GolCasa']), int(r['GolOspite'])
+        else:
+            go, gc = int(r['GolCasa']), int(r['GolOspite'])
+            
+        if gc > go:
+            punti1 += 2
+        elif go > gc:
+            punti2 += 2
+        else:
+            punti1 += 1
+            punti2 += 1
+            
+    return punti1, punti2
+
 def aggiorna_classifica(df):
     stats = {}
+    
+    # Inizializza le statistiche per ogni squadra
+    squadre = set(df['Casa'].unique()).union(set(df['Ospite'].unique()))
+    for squadra in squadre:
+        stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0, 'G': 0, 'V': 0, 'N': 0, 'P': 0}
+    
+    # Calcola le statistiche di base
     for _, r in df.iterrows():
         if not bool(r.get('Validata', False)):
             continue
+            
         casa, osp = r['Casa'], r['Ospite']
         gc, go = int(r['GolCasa']), int(r['GolOspite'])
-        for squadra in [casa, osp]:
-            if squadra not in stats:
-                stats[squadra] = {'Punti': 0, 'GF': 0, 'GS': 0, 'DR': 0, 'G': 0, 'V': 0, 'N': 0, 'P': 0}
+        
+        # Aggiorna statistiche generali
         stats[casa]['G'] += 1
         stats[osp]['G'] += 1
         stats[casa]['GF'] += gc
         stats[casa]['GS'] += go
         stats[osp]['GF'] += go
         stats[osp]['GS'] += gc
+        
+        # Aggiorna punteggi
         if gc > go:
             stats[casa]['Punti'] += 2
             stats[casa]['V'] += 1
@@ -599,22 +649,62 @@ def aggiorna_classifica(df):
             stats[osp]['Punti'] += 1
             stats[casa]['N'] += 1
             stats[osp]['N'] += 1
+    
+    # Calcola la differenza reti per ogni squadra
+    for squadra in stats:
+        stats[squadra]['DR'] = stats[squadra]['GF'] - stats[squadra]['GS']
+    
+    # Crea il DataFrame
     if not stats:
         return pd.DataFrame(columns=['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR'])
-    df_class = pd.DataFrame([
-        {'Squadra': s,
-         'Punti': v['Punti'],
-         'G': v['G'],
-         'V': v['V'],
-         'N': v['N'],
-         'P': v['P'],
-         'GF': v['GF'],
-         'GS': v['GS'],
-         'DR': v['GF'] - v['GS']}
-        for s, v in stats.items()
-    ])
-    df_class = df_class.sort_values(by=['Punti', 'DR', 'GF'], ascending=False).reset_index(drop=True)
-    return df_class
+    
+    df_classifica = pd.DataFrame([(k, v['Punti'], v['G'], v['V'], v['N'], v['P'], v['GF'], v['GS'], v['DR']) 
+                                for k, v in stats.items()],
+                              columns=['Squadra', 'Punti', 'G', 'V', 'N', 'P', 'GF', 'GS', 'DR'])
+    
+    # Ordina usando una chiave personalizzata che include il confronto diretto
+    def sort_key(row):
+        # Crea una tupla con i criteri di ordinamento
+        # 1. Punti (decrescente)
+        # 2. Punti negli scontri diretti (se ci sono)
+        # 3. Differenza reti (decrescente)
+        # 4. Gol fatti (decrescente)
+        # 5. Nome squadra (crescente)
+        
+        punti = -row['Punti']  # Moltiplicato per -1 per ordinamento decrescente
+        dr = -row['DR']
+        gf = -row['GF']
+        squadra = row['Squadra'].lower()  # Converti in minuscolo per ordinamento case-insensitive
+        
+        # Calcola i punti negli scontri diretti con le squadre con gli stessi punti
+        stesse_punti = df_classifica[df_classifica['Punti'] == row['Punti']]['Squadra'].tolist()
+        if len(stesse_punti) > 1 and row['Squadra'] in stesse_punti:
+            # Calcola la classifica parziale solo tra le squadre a pari punti
+            punteggi_scontri = {}
+            for s in stesse_punti:
+                punteggi_scontri[s] = 0
+                
+            for i, s1 in enumerate(stesse_punti):
+                for s2 in stesse_punti[i+1:]:
+                    p1, p2 = calcola_punti_scontro_diretto(s1, s2, df)
+                    punteggi_scontri[s1] += p1
+                    punteggi_scontri[s2] += p2
+            
+            # Usa il punteggio negli scontri diretti come secondo criterio
+            punti_scontri = -punteggi_scontri.get(row['Squadra'], 0)
+        else:
+            punti_scontri = 0
+            
+        # Aggiungi un log per debug
+        # st.write(f"{row['Squadra']}: Punti={-punti}, Scontri={-punti_scontri}, DR={-dr}, GF={-gf}")
+            
+        return (punti, punti_scontri, dr, gf, squadra)
+    
+    # Applica l'ordinamento personalizzato
+    indici_ordinati = sorted(df_classifica.index, key=lambda x: sort_key(df_classifica.loc[x]))
+    df_classifica = df_classifica.loc[indici_ordinati].reset_index(drop=True)
+    
+    return df_classifica
 
 @st.cache_data
 def genera_accoppiamenti(classifica, precedenti):
@@ -727,12 +817,18 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'GolOspite'] = st.session_state.risultati_temp[key_go]
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = True
                     st.session_state.df_torneo.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']] = df_turno_corrente.loc[df_turno_corrente.index, ['GolCasa', 'GolOspite', 'Validata']]
-                    st.success("✅ Risultato validato!")
+                    if salva_torneo_su_db():
+                        st.success("✅ Risultato validato e salvato!")
+                    else:
+                        st.error("❌ Errore durante il salvataggio del risultato")
                 else:
                     # Rimuovi la validazione se deselezionata
                     df_turno_corrente.loc[df_turno_corrente['Casa'] == casa, 'Validata'] = False
                     st.session_state.df_torneo.loc[df_turno_corrente.index, 'Validata'] = False
-                    st.info("⚠️ Validazione rimossa")
+                    if salva_torneo_su_db():
+                        st.info("⚠️ Validazione rimossa e modifiche salvate")
+                    else:
+                        st.error("❌ Errore durante il salvataggio delle modifiche")
                 st.rerun()
             
             # Mostra stato validazione
@@ -1246,13 +1342,23 @@ if st.session_state.torneo_iniziato and not st.session_state.torneo_finito:
                     disabled=is_disabled_next,
                     help="Genera il prossimo turno" + ("" if verify_write_access() else " (accesso in sola lettura)")):
                     if verify_write_access():
-                        salva_torneo_su_db() # Salva i risultati del turno corrente
+                        # Salva i risultati del turno corrente
+                        if not salva_torneo_su_db():
+                            st.error("❌ Errore durante il salvataggio del turno corrente")
+                            st.stop()
+                            
                         st.session_state.turno_attivo += 1
                         df_turno_prossimo["Turno"] = st.session_state.turno_attivo
                         st.session_state.df_torneo = pd.concat([st.session_state.df_torneo, df_turno_prossimo], ignore_index=True)
                         st.session_state.risultati_temp = {}
                         init_results_temp_from_df(df_turno_prossimo)
-                        st.rerun()
+                        
+                        # Salva il nuovo turno
+                        if salva_torneo_su_db():
+                            st.success("✅ Nuovo turno generato e salvato con successo!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Errore durante il salvataggio del nuovo turno")
                     else:
                         st.error("⛔ Accesso in sola lettura. Non è possibile generare nuovi turni.")
             else:
