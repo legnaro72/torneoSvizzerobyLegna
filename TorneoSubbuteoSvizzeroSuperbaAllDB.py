@@ -810,6 +810,11 @@ def visualizza_incontri_attivi(df_turno_corrente, turno_attivo, modalita_visuali
             
             # Aggiorna il risultato quando la checkbox cambia stato
             if validata_checkbox != st.session_state.risultati_temp.get(key_val, False):
+                # Controlla i permessi di scrittura prima di procedere
+                if validata_checkbox and not verify_write_access():
+                    st.error("⛔ Accesso in sola lettura. Non è possibile validare la partita.")
+                    continue
+                    
                 st.session_state.risultati_temp[key_val] = validata_checkbox
                 if validata_checkbox:
                     # Salva i risultati nel DataFrame quando viene validato
@@ -856,12 +861,12 @@ if not st.session_state.torneo_iniziato and st.session_state.setup_mode is None:
         with st.container(border=True):
             st.markdown(
                 """<div style='text-align:center'>
-                    <h2>📂 Carica torneo esistente</h2>
-                    <p style='margin:0.2rem 0 1rem 0'>Riprendi un torneo salvato (MongoDB)</p>
+                    <h2>📂 Carica torneo</h2>
+                    <p style='margin:0.2rem 0 1rem 0'>Visualizza o riprendi un torneo esistente</p>
                     </div>""",
                 unsafe_allow_html=True,
             )
-            if st.button("Carica torneo (MongoDB) 📂", key="btn_carica", use_container_width=True):
+            if st.button("Carica torneo 📂", key="btn_carica", use_container_width=True):
                 st.session_state.setup_mode = "carica_db"
                 st.session_state.torneo_finito = False
                 st.rerun()
@@ -902,59 +907,45 @@ if "mostra_incontri_disputati" not in st.session_state:
 # Logica di caricamento o creazione torneo
 # -------------------------
 if st.session_state.setup_mode == "carica_db":
+    # Mostra lo stato di accesso in modo chiaro
+    if not verify_write_access():
+        st.warning("🔒 Modalità di sola lettura: non è possibile modificare i tornei")
+    
     st.markdown("#### 📥 Carica torneo da MongoDB")
     with st.spinner("Caricamento elenco tornei..."):
         tornei_disponibili = carica_nomi_tornei_da_db()
     
-    if tornei_disponibili:
-        st.success(f"✅ Trovati {len(tornei_disponibili)} tornei disponibili")
-        opzione_scelta = st.selectbox(
-            "Seleziona il torneo da caricare:", 
-            tornei_disponibili,
-            index=0,
-            key="torneo_selezionato"
+    if not tornei_disponibili:
+        st.warning("Nessun torneo trovato nel database.")
+        if st.button("Torna indietro"):
+            st.session_state.setup_mode = None
+            st.rerun()
+    else:
+        torneo_scelto = st.selectbox(
+            "Seleziona il torneo da caricare",
+            options=tornei_disponibili,
+            index=None,
+            placeholder="Scegli un torneo..."
         )
         
-        col1, col2 = st.columns(2)
-        with col1:
-            # Mostra un avviso se in modalità sola lettura
-            if not verify_write_access():
-                st.info("🔒 Modalità di sola lettura attiva. Puoi visualizzare ma non modificare i tornei.")
-                
-            # Convert NumPy boolean to Python boolean for the disabled state
-            is_disabled_load = bool(not verify_write_access() and not opzione_scelta)
-            if st.button("🔄 Carica Torneo", 
-                        type="primary", 
-                        use_container_width=True,
-                        disabled=is_disabled_load,
-                        help="Carica il torneo selezionato" + ("" if verify_write_access() else " (accesso in sola lettura)")):
-                with st.spinner(f"Caricamento di '{opzione_scelta}' in corso..."):
-                    if carica_torneo_da_db(opzione_scelta):
-                        st.balloons()
-                        st.success(f"✅ Torneo '{opzione_scelta}' caricato con successo!")
+        if torneo_scelto:
+            if st.button("Carica torneo"):
+                with st.spinner(f"Caricamento del torneo {torneo_scelto}..."):
+                    if carica_torneo_da_db(torneo_scelto):
+                        st.session_state.torneo_iniziato = True
+                        st.session_state.setup_mode = None
+                        st.success(f"✅ Torneo '{torneo_scelto}' caricato con successo!")
                         st.session_state.torneo_finito = False
                         st.rerun()
             
-            # Pulsante per la visualizzazione in sola lettura
-            if not verify_write_access() and opzione_scelta:
-                if st.button("👁️ Visualizza Torneo (Sola Lettura)", 
-                           use_container_width=True,
-                           type="secondary"):
-                    with st.spinner(f"Caricamento in modalità di sola lettura di '{opzione_scelta}'..."):
-                        if carica_torneo_da_db(opzione_scelta):
-                            st.balloons()
-                            st.success(f"✅ Torneo '{opzione_scelta}' caricato in modalità di sola lettura!")
-                            st.session_state.torneo_finito = False
-                            st.rerun()
-        with col2:
-            if st.button("↩️ Torna indietro", use_container_width=True):
+            # Mostra un messaggio di avviso in modalità sola lettura
+            if not verify_write_access():
+                st.info("ℹ️ In modalità di sola lettura puoi visualizzare i tornei ma non apportare modifiche.")
+                        
+            # Aggiungi un pulsante per tornare indietro
+            if st.button("Torna indietro"):
                 st.session_state.setup_mode = None
                 st.rerun()
-    else:
-        st.warning("⚠️ Nessun torneo trovato nel database.")
-        if st.button("↩️ Torna indietro"):
-            st.session_state.setup_mode = None
-            st.rerun()
 
 if st.session_state.setup_mode == "nuovo":
     st.markdown("#### ✨ Crea nuovo torneo — passo per passo")
