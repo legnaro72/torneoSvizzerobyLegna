@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
-from pymongo.mongo_client import MongoClient
+from pymongo import MongoClient, UpdateOne, InsertOne
 from pymongo.server_api import ServerApi
 import certifi
 
-# Import auth utilities
+# Import custom utilities
 import auth_utils as auth
+import logging_utils as log
 
 # Dati di connessione a MongoDB forniti dall'utente
 MONGO_URI_PLAYERS = "mongodb+srv://massimilianoferrando:Legnaro21!$@cluster0.t3750lc.mongodb.net/?retryWrites=true&w=majority"
@@ -286,8 +287,50 @@ def carica_dati_da_mongo():
     return pd.DataFrame(columns=["Giocatore", "Squadra", "Potenziale"])
 
 def salva_dati_su_mongo(df):
-    collection_players.delete_many({})
-    collection_players.insert_many(df.to_dict('records'))
+    # Assicurati che le colonne obbligatorie siano presenti
+    colonne_obbligatorie = ["Giocatore", "Squadra", "Potenziale", "Ruolo", "Password", "SetPwd"]
+    for col in colonne_obbligatorie:
+        if col not in df.columns:
+            df[col] = None if col != "SetPwd" else 0
+            
+    # Prendi i dati esistenti per il confronto
+    dati_esistenti = {d["Giocatore"]: d for d in collection_players.find({})}
+    
+    # Prepara i dati per l'aggiornamento
+    operazioni = []
+    for record in df.to_dict('records'):
+        giocatore = record["Giocatore"]
+        if giocatore in dati_esistenti:
+            # Prendi il record esistente
+            record_esistente = dati_esistenti[giocatore]
+            
+            # Mantieni il valore esistente di SetPwd se è 1
+            if record_esistente.get("SetPwd") == 1:
+                record["SetPwd"] = 1
+            else:
+                record["SetPwd"] = record.get("SetPwd", 0)
+                
+            # Mantieni i valori delle altre colonne nascoste se non specificate
+            for col in ["Squadra", "Potenziale", "Ruolo", "Password"]:
+                if col not in record or record[col] is None:
+                    record[col] = record_esistente.get(col, "")
+            
+            # Aggiorna solo i campi modificati
+            operazioni.append(UpdateOne(
+                {"Giocatore": giocatore},
+                {"$set": record}
+            ))
+        else:
+            # Inserisci un nuovo record con valori di default
+            record["SetPwd"] = record.get("SetPwd", 0)
+            for col in ["Squadra", "Potenziale", "Ruolo", "Password"]:
+                if col not in record or record[col] is None:
+                    record[col] = ""
+            operazioni.append(InsertOne(record))
+    
+    # Esegui le operazioni in batch
+    if operazioni:
+        collection_players.bulk_write(operazioni, ordered=False)
 
 # --- Sezione per la gestione dei tornei ---
 def carica_tornei_all_italiana():
@@ -429,6 +472,7 @@ def save_player(giocatore, squadra, potenziale, ruolo="R"):
     if giocatore.strip() == "":
         st.error("Il nome del giocatore non può essere vuoto!")
     else:
+        username = st.session_state.get('user', {}).get('username', 'sconosciuto')
         if st.session_state.edit_index == -1:
             new_row = {
                 "Giocatore": giocatore,
@@ -439,17 +483,56 @@ def save_player(giocatore, squadra, potenziale, ruolo="R"):
                 "SetPwd": 0
             }
             st.session_state.df_giocatori = pd.concat([st.session_state.df_giocatori, pd.DataFrame([new_row])], ignore_index=True)
+            action = "aggiunta_giocatore"
             st.toast(f"Giocatore '{giocatore}' aggiunto!")
         else:
             idx = st.session_state.edit_index
+            old_name = st.session_state.df_giocatori.at[idx, "Giocatore"]
+            old_squadra = st.session_state.df_giocatori.at[idx, "Squadra"]
+            old_potenziale = st.session_state.df_giocatori.at[idx, "Potenziale"]
+            old_ruolo = st.session_state.df_giocatori.at[idx, "Ruolo"]
+            
             st.session_state.df_giocatori.at[idx, "Giocatore"] = giocatore.strip()
             st.session_state.df_giocatori.at[idx, "Squadra"] = squadra.strip()
             st.session_state.df_giocatori.at[idx, "Potenziale"] = potenziale
             st.session_state.df_giocatori.at[idx, "Ruolo"] = ruolo
+            action = "modifica_giocatore"
             st.toast(f"Giocatore '{giocatore}' aggiornato!")
             
         st.session_state.df_giocatori = st.session_state.df_giocatori.sort_values(by="Giocatore").reset_index(drop=True)
         salva_dati_su_mongo(st.session_state.df_giocatori)
+        
+        # Log dell'azione
+        log_details = {
+            "tipo_operazione": action,
+            "giocatore": giocatore,
+            "squadra": squadra,
+            "potenziale": potenziale,
+            "ruolo": ruolo
+        }
+        
+        # Aggiungi i vecchi valori se è una modifica
+        if action == "modifica_giocatore":
+            changes = {}
+            if old_name != giocatore.strip():
+                changes["nome"] = {"da": old_name, "a": giocatore.strip()}
+            if old_squadra != squadra.strip():
+                changes["squadra"] = {"da": old_squadra, "a": squadra.strip()}
+            if old_potenziale != potenziale:
+                changes["potenziale"] = {"da": old_potenziale, "a": potenziale}
+            if old_ruolo != ruolo:
+                changes["ruolo"] = {"da": old_ruolo, "a": ruolo}
+                
+            log_details["modifiche"] = changes
+            log_details["riassunto_modifiche"] = ", ".join([f"{k}: {v['da']} → {v['a']}" for k, v in changes.items()])
+        
+        log.log_action(
+            username=username,
+            action=action,
+            torneo="gestione_giocatori",
+            details=log_details
+        )
+        
         st.session_state.edit_index = None
         st.rerun()
 
@@ -457,12 +540,15 @@ def modify_player(idx):
     st.session_state.edit_index = idx
 
 def confirm_delete_player(idx, selected_player):
-    st.session_state.confirm_delete = {"type": "player", "data": (idx, selected_player), "password_required": True}
+    st.session_state.confirm_delete = {"type": "player", "data": (idx, selected_player), "password_required": False}
     st.rerun()
 
 def confirm_delete_torneo_italiana(selected_tornei):
-    # Controlla se si sta cercando di eliminare un torneo che inizia con 'Campionato'
-    password_required = any(isinstance(t, str) and t.startswith("Campionato") for t in selected_tornei)
+    # Richiede la password per qualsiasi torneo che contenga 'campionato' nel nome
+    # anche se è una cancellazione singola
+    tornei_list = [selected_tornei] if isinstance(selected_tornei, str) else selected_tornei
+    password_required = any(isinstance(t, str) and "campionato" in t.lower() for t in tornei_list)
+    
     st.session_state.confirm_delete = {
         "type": "tornei_ita", 
         "data": selected_tornei, 
@@ -471,8 +557,11 @@ def confirm_delete_torneo_italiana(selected_tornei):
     st.rerun()
 
 def confirm_delete_torneo_svizzero(selected_tornei):
-    # Controlla se si sta cercando di eliminare un torneo che inizia con 'Campionato'
-    password_required = any(isinstance(t, str) and t.startswith("Campionato") for t in selected_tornei)
+    # Richiede la password per qualsiasi torneo che contenga 'campionato' nel nome
+    # anche se è una cancellazione singola
+    tornei_list = [selected_tornei] if isinstance(selected_tornei, str) else selected_tornei
+    password_required = any(isinstance(t, str) and "campionato" in t.lower() for t in tornei_list)
+    
     st.session_state.confirm_delete = {
         "type": "tornei_svizz", 
         "data": selected_tornei, 
@@ -515,62 +604,184 @@ def process_deletion_with_password(password, deletion_type, data):
         return
 
     if password == correct_password:
+        username = st.session_state.get('user', {}).get('username', 'sconosciuto')
         if deletion_type == "player":
             idx, selected_player = data
+            player_data = st.session_state.df_giocatori.iloc[idx].to_dict()
             st.session_state.df_giocatori = st.session_state.df_giocatori.drop(idx).reset_index(drop=True)
             salva_dati_su_mongo(st.session_state.df_giocatori)
+            
+            # Log player deletion
+            log.log_action(
+                username=username,
+                action="eliminazione_giocatore",
+                torneo="gestione_giocatori",
+                details={
+                    "tipo_operazione": "eliminazione_giocatore",
+                    "giocatore": selected_player,
+                    "dettagli_giocatore": {
+                        "squadra": player_data.get("Squadra", ""),
+                        "ruolo": player_data.get("Ruolo", ""),
+                        "potenziale": player_data.get("Potenziale", "")
+                    }
+                }
+            )
             st.toast(f"Giocatore '{selected_player}' eliminato!")
 
         elif deletion_type == "tornei_ita":
             db_tornei = client_italiana["TorneiSubbuteo"]
             collection_tornei = db_tornei["Superba"]
             for torneo in data:
+                # Log before deletion
+                torneo_data = collection_tornei.find_one({"nome_torneo": torneo})
                 collection_tornei.delete_one({"nome_torneo": torneo})
                 st.session_state.df_tornei_italiana = st.session_state.df_tornei_italiana[st.session_state.df_tornei_italiana["Torneo"] != torneo].reset_index(drop=True)
+                
+                # Log tournament deletion
+                log.log_action(
+                    username=username,
+                    action="eliminazione_torneo_italiano",
+                    torneo=torneo,
+                    details={
+                        "tipo_operazione": "eliminazione_torneo_singolo",
+                        "torneo": torneo,
+                        "tornei_eliminati": 1,
+                        "dettagli_torneo": {
+                            "tipo": "italiano",
+                            "partecipanti": torneo_data.get("partite", []) if torneo_data else []
+                        }
+                    }
+                )
                 st.toast(f"Torneo '{torneo}' eliminato!")
 
         elif deletion_type == "tornei_svizz":
             db_tornei = client_svizzera["TorneiSubbuteo"]
             collection_tornei = db_tornei["SuperbaSvizzero"]
             for torneo in data:
+                # Log before deletion
+                torneo_data = collection_tornei.find_one({"nome_torneo": torneo})
                 collection_tornei.delete_one({"nome_torneo": torneo})
                 st.session_state.df_tornei_svizzeri = st.session_state.df_tornei_svizzeri[st.session_state.df_tornei_svizzeri["Torneo"] != torneo].reset_index(drop=True)
+                
+                # Log tournament deletion
+                log.log_action(
+                    username=username,
+                    action="eliminazione_torneo_svizzero",
+                    torneo=torneo,
+                    details={
+                        "tipo_operazione": "eliminazione_torneo_singolo",
+                        "torneo": torneo,
+                        "tornei_eliminati": 1,
+                        "dettagli_torneo": {
+                            "tipo": "svizzero",
+                            "partecipanti": torneo_data.get("partite", []) if torneo_data else []
+                        }
+                    }
+                )
                 st.toast(f"Torneo '{torneo}' eliminato!")
 
         elif deletion_type == "all_ita":
             db_tornei = client_italiana["TorneiSubbuteo"]
             collection_tornei = db_tornei["Superba"]
             tornei_da_cancellare = [t["nome_torneo"] for t in collection_tornei.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            
+            # Get count before deletion for logging
+            count_before = collection_tornei.count_documents({})
+            
             for torneo in tornei_da_cancellare:
                 collection_tornei.delete_one({"nome_torneo": torneo})
+                
+            count_after = collection_tornei.count_documents({})
             st.session_state.df_tornei_italiana = carica_tornei_all_italiana()
+            
+            # Log mass deletion
+            if tornei_da_cancellare:
+                log.log_action(
+                    username=username,
+                    action="eliminazione_massiva_tornei_italiani",
+                    torneo="tutti_tornei_italiani",
+                    details={
+                        "tipo_operazione": "eliminazione_massiva_tornei",
+                        "tornei_eliminati": len(tornei_da_cancellare),
+                        "tornei_rimasti": count_after,
+                        "esclusi_campionati": True,
+                        "tornei_esclusi": [t for t in collection_tornei.find({}) if "campionato" in t["nome_torneo"].lower()]
+                    }
+                )
+            
             st.toast("✅ Tutti i tornei all'italiana (esclusi i campionati) sono stati eliminati!")
 
         elif deletion_type == "all_svizz":
             db_tornei = client_svizzera["TorneiSubbuteo"]
             collection_tornei = db_tornei["SuperbaSvizzero"]
             tornei_da_cancellare = [t["nome_torneo"] for t in collection_tornei.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            
+            # Get count before deletion for logging
+            count_before = collection_tornei.count_documents({})
+            
             for torneo in tornei_da_cancellare:
                 collection_tornei.delete_one({"nome_torneo": torneo})
+                
+            count_after = collection_tornei.count_documents({})
             st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
+            
+            # Log mass deletion
+            if tornei_da_cancellare:
+                log.log_action(
+                    username=username,
+                    action="eliminazione_massiva_tornei_svizzeri",
+                    torneo="tutti_tornei_svizzeri",
+                    details={
+                        "tipo_operazione": "eliminazione_massiva_tornei",
+                        "tornei_eliminati": len(tornei_da_cancellare),
+                        "tornei_rimasti": count_after,
+                        "esclusi_campionati": True,
+                        "tornei_esclusi": [t for t in collection_tornei.find({}) if "campionato" in t["nome_torneo"].lower()]
+                    }
+                )
+            
             st.toast("✅ Tutti i tornei svizzeri (esclusi i campionati) sono stati eliminati!")
 
         elif deletion_type == "all":
             # Chiamiamo le funzioni specifiche per applicare il filtro
             db_tornei_ita = client_italiana["TorneiSubbuteo"]
             collection_tornei_ita = db_tornei_ita["Superba"]
-            tornei_da_cancellare_ita = [t["nome_torneo"] for t in collection_tornei_ita.find({}) if "campionato" not in t["nome_torneo"].lower()]
-            for torneo in tornei_da_cancellare_ita:
-                collection_tornei_ita.delete_one({"nome_torneo": torneo})
+            tornei_prima_ita = list(collection_tornei_ita.find({}))
+            tornei_da_cancellare_ita = [t["nome_torneo"] for t in tornei_prima_ita if "campionato" not in t["nome_torneo"].lower()]
             
             db_tornei_svizz = client_svizzera["TorneiSubbuteo"]
             collection_tornei_svizz = db_tornei_svizz["SuperbaSvizzero"]
-            tornei_da_cancellare_svizz = [t["nome_torneo"] for t in collection_tornei_svizz.find({}) if "campionato" not in t["nome_torneo"].lower()]
+            tornei_prima_svizz = list(collection_tornei_svizz.find({}))
+            tornei_da_cancellare_svizz = [t["nome_torneo"] for t in tornei_prima_svizz if "campionato" not in t["nome_torneo"].lower()]
+            
+            # Esecuzione delle cancellazioni
+            for torneo in tornei_da_cancellare_ita:
+                collection_tornei_ita.delete_one({"nome_torneo": torneo})
+            
             for torneo in tornei_da_cancellare_svizz:
                 collection_tornei_svizz.delete_one({"nome_torneo": torneo})
             
+            # Aggiornamento degli stati
             st.session_state.df_tornei_italiana = carica_tornei_all_italiana()
             st.session_state.df_tornei_svizzeri = carica_tornei_svizzeri()
+            
+            # Log dell'operazione di cancellazione completa
+            log.log_action(
+                username=username,
+                action="eliminazione_completa_tornei",
+                torneo="tutti_tornei",
+                details={
+                    "tipo_operazione": "eliminazione_massiva_tutti_tornei",
+                    "tornei_italiani_eliminati": len(tornei_da_cancellare_ita),
+                    "tornei_svizzeri_eliminati": len(tornei_da_cancellare_svizz),
+                    "tornei_italiani_rimasti": collection_tornei_ita.count_documents({}),
+                    "tornei_svizzeri_rimasti": collection_tornei_svizz.count_documents({}),
+                    "esclusi_campionati": True,
+                    "tornei_esclusi_ita": [t["nome_torneo"] for t in tornei_prima_ita if "campionato" in t["nome_torneo"].lower()],
+                    "tornei_esclusi_svizz": [t["nome_torneo"] for t in tornei_prima_svizz if "campionato" in t["nome_torneo"].lower()]
+                }
+            )
+            
             st.toast("✅ TUTTI i tornei (esclusi i campionati) sono stati eliminati!")
 
         # Reset state after successful deletion
@@ -669,13 +880,44 @@ if st.session_state.edit_index is None and st.session_state.confirm_delete["type
             with col1:
                 if st.button("✅ Conferma Salvataggio"):
                     if password == "Legnaro72":
-                        # Update the dataframe in session state
-                        st.session_state.df_giocatori = edited_df
-                        # Save to database
-                        salva_dati_su_mongo(edited_df)
-                        st.success("✅ Modifiche salvate con successo!")
-                        st.session_state.show_password_dialog = False
-                        st.rerun()
+                        # Log delle modifiche prima di aggiornare
+                        if not st.session_state.df_giocatori.equals(edited_df):
+                            # Trova le differenze
+                            changes = []
+                            for idx in range(len(edited_df)):
+                                old_row = st.session_state.df_giocatori.iloc[idx]
+                                new_row = edited_df.iloc[idx]
+                                if not old_row.equals(new_row):
+                                    changes.append({
+                                        'giocatore': new_row['Giocatore'],
+                                        'campi_modificati': [
+                                            col for col in edited_df.columns 
+                                            if col in st.session_state.df_giocatori.columns 
+                                            and old_row[col] != new_row[col]
+                                        ]
+                                    })
+                            
+                            # Aggiorna il dataframe in session state
+                            st.session_state.df_giocatori = edited_df
+                            # Salva nel database
+                            salva_dati_su_mongo(edited_df)
+                            
+                            # Log delle modifiche
+                            username = st.session_state.get('user', {}).get('username', 'sconosciuto')
+                            log.log_action(
+                                username=username,
+                                action="modifica_massiva_giocatori",
+                                torneo="gestione_giocatori",
+                                details={
+                                    "tipo_operazione": "modifica_massiva_giocatori",
+                                    "modifiche": changes,
+                                    "totale_giocatori_modificati": len(changes)
+                                }
+                            )
+                            
+                            st.success("✅ Modifiche salvate con successo!")
+                            st.session_state.show_password_dialog = False
+                            st.rerun()
                     else:
                         st.error("❌ Password errata. Le modifiche non sono state salvate.")
             with col2:
@@ -791,12 +1033,41 @@ elif st.session_state.edit_index is not None: # Logica di modifica/aggiunta gioc
 
     if st.session_state.edit_index != -1:  # Only show in edit mode, not in add mode
         if is_admin:
-            if st.button("🔄 Reset Password", help="Resetta la password dell'utente e imposta SetPwd a 0"):
+            if st.button(" Reset Password", help="Resetta la password dell'utente e imposta SetPwd a 0"):
                 idx = st.session_state.edit_index
+                giocatore = st.session_state.df_giocatori.iloc[idx]["Giocatore"]
+                
+                # Salva i vecchi valori per il log
+                vecchio_setpwd = st.session_state.df_giocatori.at[idx, "SetPwd"] if "SetPwd" in st.session_state.df_giocatori.columns else 0
+                
+                # Esegui il reset
                 st.session_state.df_giocatori.at[idx, "Password"] = None
+                # Assicurati che la colonna SetPwd esista
+                if "SetPwd" not in st.session_state.df_giocatori.columns:
+                    st.session_state.df_giocatori["SetPwd"] = 0
                 st.session_state.df_giocatori.at[idx, "SetPwd"] = 0
                 salva_dati_su_mongo(st.session_state.df_giocatori)
-                st.toast("✅ Password resettata con successo!")
+                
+                # Log dell'azione
+                username = st.session_state.get('user', {}).get('username', 'sconosciuto')
+                log.log_action(
+                    username=username,
+                    action="reset_password",
+                    torneo="gestione_giocatori",
+                    details={
+                        "tipo_operazione": "reset_password",
+                        "giocatore": giocatore,
+                        "vecchi_valori": {
+                            "SetPwd": vecchio_setpwd
+                        },
+                        "nuovi_valori": {
+                            "SetPwd": 0,
+                            "Password": "Resettata"
+                        }
+                    }
+                )
+                
+                st.toast(" Password resettata con successo!")
                 st.rerun()
         else:
             st.warning("Solo l'amministratore può resettare le password")
@@ -804,6 +1075,7 @@ elif st.session_state.edit_index is not None: # Logica di modifica/aggiunta gioc
     col_save, col_cancel = st.columns(2)
     with col_save:
         if is_guest:
+            st.button(" Salva", disabled=True, help="Non disponibile per gli ospiti")
             st.button("✅ Salva", disabled=True, help="Non disponibile per gli ospiti")
         else:
             if st.button("✅ Salva"):
@@ -833,16 +1105,17 @@ elif st.session_state.confirm_delete["type"] is not None:
 
     col_confirm, col_cancel = st.columns(2)
     
-    # Mostra la richiesta di password solo se richiesta per questo tipo di operazione
+    # Se è richiesta la password, mostra la finestra di dialogo
     if st.session_state.confirm_delete["password_required"]:
+        # Mostra il pulsante di conferma che aprirà il campo password
         with col_confirm:
             if st.button("Conferma e procedi"):
                 st.session_state.password_check["show"] = True
                 st.session_state.password_check["type"] = deletion_type
-        with col_cancel:
-            st.button("❌ Annulla", on_click=cancel_delete)
+                st.rerun()
         
-        if st.session_state.password_check["show"]:
+        # Mostra il campo password solo se è stato cliccato Conferma
+        if st.session_state.password_check.get("show", False):
             password = st.text_input("Inserisci la password per confermare", type="password")
             if st.button("Conferma Password"):
                 process_deletion_with_password(password, st.session_state.password_check["type"], st.session_state.confirm_delete["data"])
@@ -850,9 +1123,12 @@ elif st.session_state.confirm_delete["type"] is not None:
         # Se non è richiesta la password, procedi direttamente con la conferma
         with col_confirm:
             if st.button("Conferma eliminazione"):
-                process_deletion_with_password("", deletion_type, st.session_state.confirm_delete["data"])
-        with col_cancel:
-            st.button("❌ Annulla", on_click=cancel_delete)
+                # Esegui direttamente la cancellazione senza chiedere la password
+                process_deletion_with_password("non_richiesta", deletion_type, st.session_state.confirm_delete["data"])
+    
+    # Pulsante Annulla (comune a entrambi i casi)
+    with col_cancel:
+        st.button("❌ Annulla", on_click=cancel_delete)
 
 # Footer leggero
 st.markdown("---")
